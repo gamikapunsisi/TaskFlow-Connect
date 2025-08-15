@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
 	<key>API_KEY</key>
-	<string>AIzaSyB6QvrV0Jy_t2mU7TRvlZUS7oirNazDqn4</string>
+	<string>AIzaSyBE3R7CMm4_coRXuHs4Wk-WG-xui02IVm4</string>
 	<key>GCM_SENDER_ID</key>
-	<string>190188851131</string>
+	<string>734974684826</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
 	<string>taskflow</string>
 	<key>PROJECT_ID</key>
-	<string>tashflow-bdcfb</string>
+	<string>taskflow-ff385</string>
 	<key>STORAGE_BUCKET</key>
-	<string>tashflow-bdcfb.firebasestorage.app</string>
+	<string>taskflow-ff385.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:190188851131:ios:7f757325a195ba085a7e9e</string>
+	<string>1:734974684826:ios:a0365761f135b69ed13923</string>
 </dict>
 </plist>
