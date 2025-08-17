@@ -26,5 +26,9 @@
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
 	<string>1:190188851131:ios:7f757325a195ba085a7e9e</string>
+    <key>NSCameraUsageDescription</key>
+    <string>This app needs access to camera to take photos for services</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>This app needs access to photo library to select images for services</string>
 </dict>
 </plist>

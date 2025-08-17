@@ -1,10 +1,3 @@
-//
-//  LoginView.swift
-//  TaskFlow
-//
-//  Created by Gamika Punsisi on 2025-08-13.
-//
-
 import SwiftUI
 
 struct LoginView: View {

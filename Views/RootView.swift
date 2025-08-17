@@ -1,10 +1,3 @@
-//
-//  RootView.swift
-//  TaskFlow
-//
-//  Created by Gamika Punsisi on 2025-08-13.
-//
-
 import SwiftUI
 
 enum AuthScreen {
@@ -17,7 +10,17 @@ struct RootView: View {
 
     var body: some View {
         if authVM.isLoggedIn {
-            MainAppView()
+            switch authVM.role {
+            case .client:
+                ClientDashboardView()
+            case .tasker:
+                TaskerDashboardView()
+            case .none:
+                ProgressView("Loading role...")
+                    .onAppear {
+                        authVM.fetchUserRole()
+                    }
+            }
         } else {
             VStack(spacing: 20) {
                 switch currentScreen {

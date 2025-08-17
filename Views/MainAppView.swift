@@ -12,9 +12,23 @@ struct MainAppView: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            Text("Welcome! You are logged in.")
-                .font(.title)
-                .padding()
+            // Show dashboard based on role
+            if let role = authVM.role {
+                switch role {
+                case .tasker:
+                    Text("Tasker Dashboard")
+                        .font(.title)
+                        .bold()
+                        .padding()
+                case .client:
+                    Text("Client Dashboard")
+                        .font(.title)
+                        .bold()
+                        .padding()
+                }
+            } else {
+                ProgressView("Loading role…")
+            }
 
             Button("Sign Out") {
                 authVM.signOut()
@@ -24,5 +38,6 @@ struct MainAppView: View {
             .foregroundColor(.white)
             .cornerRadius(8)
         }
+        .padding()
     }
 }
