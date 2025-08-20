@@ -1,15 +1,11 @@
-//
-//  BookingDetailView.swift
-//  TaskFlow
-//
-//  Created by Gamika Punsisi on 2025-08-19.
-//
-
 import SwiftUI
+import Firebase
 
-struct BookingDetailView: View {
-    let booking: Booking
+struct ClientBookingDetailView: View {
+    let booking: ClientBooking
     @Environment(\.presentationMode) var presentationMode
+    @StateObject private var bookingManager = ClientBookingManager()
+    @State private var showingCancelConfirmation = false
     
     var body: some View {
         NavigationView {
@@ -58,6 +54,15 @@ struct BookingDetailView: View {
                 }
             }
         }
+        .alert("Cancel Booking", isPresented: $showingCancelConfirmation) {
+            Button("Cancel Booking", role: .destructive) {
+                bookingManager.cancelBooking(booking)
+                presentationMode.wrappedValue.dismiss()
+            }
+            Button("Keep Booking", role: .cancel) {}
+        } message: {
+            Text("Are you sure you want to cancel this booking? This action cannot be undone.")
+        }
     }
     
     private var statusHeader: some View {
@@ -84,7 +89,7 @@ struct BookingDetailView: View {
                         .font(.system(size: 20, weight: .bold))
                         .foregroundColor(.primary)
                     
-                    Text("Created on \(DateFormatter.detailDateFormatter.string(from: booking.createdAt))")
+                    Text("Created on \(BookingDateFormatter.detailFormatter.string(from: booking.createdAt))")
                         .font(.system(size: 14, weight: .regular))
                         .foregroundColor(.secondary)
                 }
@@ -118,8 +123,8 @@ struct BookingDetailView: View {
     
     private var scheduleInfoSection: some View {
         SectionContainer(title: "Schedule", icon: "calendar") {
-            DetailRow(title: "Date", value: DateFormatter.detailDateFormatter.string(from: booking.scheduledDate))
-            DetailRow(title: "Time", value: DateFormatter.timeFormatter.string(from: booking.scheduledTime))
+            DetailRow(title: "Date", value: BookingDateFormatter.detailFormatter.string(from: booking.scheduledDate))
+            DetailRow(title: "Time", value: BookingDateFormatter.shortTimeFormatter.string(from: booking.scheduledTime))
         }
     }
     
@@ -146,7 +151,7 @@ struct BookingDetailView: View {
         VStack(spacing: 12) {
             if booking.status == .pending {
                 Button(action: {
-                    cancelBooking()
+                    showingCancelConfirmation = true
                 }) {
                     HStack {
                         Image(systemName: "xmark.circle")
@@ -181,17 +186,17 @@ struct BookingDetailView: View {
     }
     
     private func shareBooking() {
-        print("📤 Sharing booking: \(booking.id) - User: gamikapunsisi at 2025-08-19 13:51:05")
-    }
-    
-    private func cancelBooking() {
-        print("❌ Cancelling booking: \(booking.id) - User: gamikapunsisi at 2025-08-19 13:51:05")
+        print("📤 Sharing booking: \(booking.id) - User: gamikapunsisi at 2025-08-19 14:19:26")
+        // Implement sharing functionality
     }
     
     private func contactSupport() {
-        print("📞 Contacting support for booking: \(booking.id) - User: gamikapunsisi at 2025-08-19 13:51:05")
+        print("📞 Contacting support for booking: \(booking.id) - User: gamikapunsisi at 2025-08-19 14:19:26")
+        // Implement support contact functionality
     }
 }
+
+// MARK: - Supporting Views
 
 struct SectionContainer<Content: View>: View {
     let title: String
@@ -238,10 +243,58 @@ struct DetailRow: View {
     }
 }
 
-extension DateFormatter {
-    static let detailDateFormatter: DateFormatter = {
+// MARK: - Booking Date Formatters (Fixed duplicate issue)
+struct BookingDateFormatter {
+    static let detailFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .full
         return formatter
     }()
+    
+    static let shortTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter
+    }()
+    
+    static let longDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .full
+        return formatter
+    }()
+    
+    static let mediumDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter
+    }()
+    
+    static let shortDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        return formatter
+    }()
+}
+
+#Preview {
+    ClientBookingDetailView(booking: ClientBooking(
+        id: "test123",
+        serviceId: "service123",
+        serviceName: "Garden Cleaning",
+        servicePrice: 2500.0,
+        estimatedDuration: "2 hours",
+        customerName: "Gamika Punsisi",
+        customerEmail: "gamikapunsisi@taskflow.lk",
+        customerPhone: "+94771234567",
+        customerAddress: "123 Main St, Colombo",
+        scheduledDate: Date(),
+        scheduledTime: Date(),
+        notes: "Please bring own equipment",
+        status: .pending,
+        paymentStatus: "pending",
+        totalAmount: 2500.0,
+        currency: "LKR",
+        createdAt: Date(),
+        updatedAt: Date()
+    ))
 }

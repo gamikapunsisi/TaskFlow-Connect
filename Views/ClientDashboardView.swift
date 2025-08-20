@@ -1,259 +1,535 @@
 import SwiftUI
+import Firebase
 
 struct ClientDashboardView: View {
+    @StateObject private var serviceManager = ServiceManager()
+    @StateObject private var bookingManager = BookingManager() // ✅ Create BookingManager here
+    @State private var searchText = ""
+    @State private var showingProfile = false
+    @State private var selectedService: Service?
+    @State private var showingSearchResults = false
+    
+    // Filter services based on search
+    var filteredServices: [Service] {
+        if searchText.isEmpty {
+            return serviceManager.services
+        } else {
+            return serviceManager.services.filter { service in
+                service.name.localizedCaseInsensitiveContains(searchText) ||
+                service.description.localizedCaseInsensitiveContains(searchText)
+            }
+        }
+    }
+    
+    // Group services by category for better display
+    var groupedServices: [String: [Service]] {
+        Dictionary(grouping: filteredServices) { service in
+            categorizeService(service.name)
+        }
+    }
+    
     var body: some View {
-        Text("Client Dashboard")
-            .font(.largeTitle)
-            .padding()
+        NavigationView {
+            ZStack {
+                Color(UIColor.systemBackground)
+                    .ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: 0) {
+                        // MARK: - Hero Section
+                        heroSection
+                        
+                        // MARK: - Services Section
+                        servicesSection
+                    }
+                }
+                .refreshable {
+                    print("🔄 Refreshing services - User: gamikapunsisi at 2025-08-20 05:32:02")
+                    serviceManager.refreshServices()
+                }
+            }
+            .navigationBarHidden(true)
+        }
+        .fullScreenCover(item: $selectedService) { service in
+            BookingNavigationFlow(service: service, bookingManager: bookingManager) // ✅ Pass local BookingManager
+        }
+        .onAppear {
+            print("🚀 ClientDashboardView appeared - User: gamikapunsisi at 2025-08-20 05:32:02")
+            serviceManager.fetchServices()
+        }
+        .ignoresSafeArea(.keyboard, edges: .bottom)
+    }
+    
+    // MARK: - Hero Section
+    private var heroSection: some View {
+        ZStack {
+            // Background with Gradient
+            LinearGradient(
+                gradient: Gradient(colors: [
+                    Color.green.opacity(0.8),
+                    Color.blue.opacity(0.6)
+                ]),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .overlay(
+                Image(systemName: "leaf.fill")
+                    .font(.system(size: 100))
+                    .foregroundColor(.white.opacity(0.1))
+                    .rotationEffect(.degrees(45))
+                    .offset(x: 50, y: -50)
+            )
+            .frame(height: 280)
+            
+            VStack(spacing: 20) {
+                Spacer()
+                
+                // TASKFLOW Title
+                HStack {
+                    Text("TASK")
+                        .font(.system(size: 32, weight: .heavy, design: .default))
+                        .foregroundColor(.white)
+                    Text("FLOW")
+                        .font(.system(size: 32, weight: .heavy, design: .default))
+                        .foregroundColor(.purple)
+                }
+                .accessibilityIdentifier("TaskFlowTitle")
+                
+                // Dynamic Subtitle
+                Text(getSubtitleText())
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.white.opacity(0.9))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+                
+                // Search Bar
+                searchBar
+                
+                Spacer()
+            }
+        }
+        .frame(height: 280)
+    }
+    
+    // MARK: - Search Bar (Fixed onChange)
+    private var searchBar: some View {
+        HStack {
+            HStack {
+                TextField("Search services...", text: $searchText)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.white)
+                    .accentColor(.white)
+                    .autocapitalization(.none)
+                    .disableAutocorrection(true)
+                    .onChange(of: searchText) { oldValue, newValue in // ✅ Fixed iOS 17+ syntax
+                        showingSearchResults = !newValue.isEmpty
+                        print("🔍 Search text changed: '\(newValue)' - User: gamikapunsisi at 2025-08-20 05:32:02")
+                    }
+                
+                if !searchText.isEmpty {
+                    Button(action: {
+                        searchText = ""
+                        showingSearchResults = false
+                        hideKeyboard()
+                        print("❌ Search cleared - User: gamikapunsisi at 2025-08-20 05:32:02")
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.white.opacity(0.8))
+                    }
+                } else {
+                    Button(action: {
+                        performSearch()
+                    }) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.white.opacity(0.8))
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(
+                Color.black.opacity(0.3)
+            )
+            .cornerRadius(25)
+            .overlay(
+                RoundedRectangle(cornerRadius: 25)
+                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+            )
+        }
+        .padding(.horizontal, 30)
+    }
+    
+    // MARK: - Services Section
+    private var servicesSection: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            // Services Header
+            HStack {
+                Text(showingSearchResults ? "Search Results" : "Available Services")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(.primary)
+                
+                Text("(\(filteredServices.count))")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                // Refresh Button
+                Button(action: {
+                    print("🔄 Manual refresh triggered - User: gamikapunsisi at 2025-08-20 05:32:02")
+                    serviceManager.refreshServices()
+                }) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.blue)
+                        .rotationEffect(.degrees(serviceManager.isLoading ? 360 : 0))
+                        .animation(
+                            serviceManager.isLoading ?
+                            Animation.linear(duration: 1).repeatForever(autoreverses: false) :
+                            Animation.default,
+                            value: serviceManager.isLoading
+                        )
+                }
+                .disabled(serviceManager.isLoading)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 30)
+            
+            // Content based on state
+            if serviceManager.isLoading && serviceManager.services.isEmpty {
+                LoadingStateView()
+            } else if let errorMessage = serviceManager.errorMessage {
+                ErrorStateView(errorMessage: errorMessage) {
+                    serviceManager.fetchServices()
+                }
+            } else if filteredServices.isEmpty {
+                EmptyStateView(isSearching: showingSearchResults) {
+                    searchText = ""
+                    showingSearchResults = false
+                }
+            } else {
+                servicesGrid
+            }
+            
+            Spacer(minLength: 120) // Extra space for bottom navigation
+        }
+    }
+    
+    // MARK: - Services Grid (Fixed warning)
+    private var servicesGrid: some View {
+        Group {
+            if showingSearchResults {
+                LazyVGrid(columns: [
+                    GridItem(.flexible(), spacing: 10),
+                    GridItem(.flexible(), spacing: 10)
+                ], spacing: 15) {
+                    ForEach(filteredServices, id: \.id) { service in
+                        ClientServiceCard(service: service) {
+                            print("🎯 Service card tapped: \(service.name) - User: gamikapunsisi at 2025-08-20 05:32:02")
+                            selectedService = service
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+            } else {
+                ForEach(Array(groupedServices.keys.sorted()), id: \.self) { category in
+                    if let categoryServices = groupedServices[category], !categoryServices.isEmpty {
+                        CategorySectionView(
+                            category: category,
+                            services: categoryServices,
+                            onServiceTap: { service in
+                                print("🎯 Service tapped in category '\(category)': \(service.name) - User: gamikapunsisi at 2025-08-20 05:32:02")
+                                print("🔄 Setting selectedService to trigger fullScreenCover - BookingManager initialized") // ✅ Fixed warning
+                                selectedService = service
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - Helper Methods
+    private func getSubtitleText() -> String {
+        let serviceCount = serviceManager.services.count
+        if serviceCount == 0 {
+            return "Find and hire professional service providers"
+        } else {
+            return "Choose from \(serviceCount) professional services available"
+        }
+    }
+    
+    private func categorizeService(_ serviceName: String) -> String {
+        let name = serviceName.lowercased()
+        
+        if name.contains("clean") || name.contains("house") {
+            return "🏠 Home Services"
+        } else if name.contains("garden") || name.contains("grass") || name.contains("coconut") || name.contains("landscap") {
+            return "🌿 Garden & Outdoor"
+        } else if name.contains("plumb") || name.contains("electric") || name.contains("repair") {
+            return "🔧 Maintenance"
+        } else if name.contains("paint") || name.contains("carpen") || name.contains("construct") {
+            return "🎨 Construction & Craft"
+        } else if name.contains("beauty") || name.contains("hair") || name.contains("massage") {
+            return "💄 Beauty & Wellness"
+        } else if name.contains("tutoring") || name.contains("teach") || name.contains("lesson") {
+            return "📚 Education"
+        } else {
+            return "⚡ Other Services"
+        }
+    }
+    
+    private func performSearch() {
+        guard !searchText.isEmpty else { return }
+        showingSearchResults = true
+        print("🔍 Searching for: '\(searchText)' - User: gamikapunsisi at 2025-08-20 05:32:02")
+        print("📊 Found \(filteredServices.count) matching services")
+    }
+    
+    private func hideKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+}
+
+// MARK: - Fixed Client Service Card
+struct ClientServiceCard: View {
+    let service: Service
+    let onTap: () -> Void
+    
+    var body: some View {
+        Button(action: {
+            print("🔘 ClientServiceCard button pressed: \(service.name) - User: gamikapunsisi at 2025-08-20 05:32:02")
+            onTap()
+        }) {
+            VStack(alignment: .leading, spacing: 8) {
+                // Service Image
+                AsyncImage(url: URL(string: service.imageUrl)) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    ZStack {
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.blue.opacity(0.6),
+                                Color.purple.opacity(0.6)
+                            ]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        
+                        Image(systemName: getServiceIcon(service.name))
+                            .font(.system(size: 32, weight: .light))
+                            .foregroundColor(.white)
+                    }
+                }
+                .frame(height: 100)
+                .cornerRadius(12)
+                .clipped()
+                
+                // Service Info
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(service.name)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.primary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    
+                    Text(service.displayPrice)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.blue)
+                    
+                    Text(service.estimatedTime)
+                        .font(.system(size: 11, weight: .regular))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 4)
+                .padding(.bottom, 8)
+            }
+            .background(Color(UIColor.secondarySystemBackground))
+            .cornerRadius(16)
+            .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 2)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .contentShape(Rectangle()) // This ensures the entire area is tappable
+        .onTapGesture {
+            print("🔘 Alternative tap gesture: \(service.name) - User: gamikapunsisi at 2025-08-20 05:32:02")
+            onTap()
+        }
+    }
+    
+    private func getServiceIcon(_ serviceName: String) -> String {
+        let name = serviceName.lowercased()
+        
+        if name.contains("clean") {
+            return "sparkles"
+        } else if name.contains("garden") || name.contains("grass") {
+            return "leaf"
+        } else if name.contains("coconut") {
+            return "tree"
+        } else if name.contains("plumb") {
+            return "wrench"
+        } else if name.contains("paint") {
+            return "paintbrush"
+        } else if name.contains("carpen") {
+            return "hammer"
+        } else if name.contains("electric") {
+            return "bolt"
+        } else if name.contains("beauty") || name.contains("hair") {
+            return "scissors"
+        } else {
+            return "briefcase"
+        }
+    }
+}
+
+// MARK: - Category Section View
+struct CategorySectionView: View {
+    let category: String
+    let services: [Service]
+    let onServiceTap: (Service) -> Void
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(category)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.primary)
+                
+                Text("(\(services.count))")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            
+            LazyVGrid(columns: [
+                GridItem(.flexible(), spacing: 10),
+                GridItem(.flexible(), spacing: 10)
+            ], spacing: 15) {
+                ForEach(services, id: \.id) { service in
+                    ClientServiceCard(service: service) {
+                        print("📂 Service selected from \(category): \(service.name) - User: gamikapunsisi at 2025-08-20 05:32:02")
+                        onServiceTap(service)
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+        }
+        .padding(.bottom, 10)
+    }
+}
+
+// MARK: - Loading State View
+struct LoadingStateView: View {
+    var body: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .scaleEffect(1.2)
+                .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+            Text("Loading services...")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.secondary)
+            Text("User: gamikapunsisi • 2025-08-20 05:32:02")
+                .font(.system(size: 10, weight: .regular))
+                .foregroundColor(.secondary.opacity(0.7))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 40)
+        .onAppear {
+            print("⏳ Loading state displayed - User: gamikapunsisi at 2025-08-20 05:32:02")
+        }
+    }
+}
+
+// MARK: - Error State View
+struct ErrorStateView: View {
+    let errorMessage: String
+    let onRetry: () -> Void
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 48))
+                .foregroundColor(.orange)
+            
+            Text("Oops! Something went wrong")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(.primary)
+            
+            Text(errorMessage)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            
+            Button("Try Again") {
+                print("🔄 Retry attempt - User: gamikapunsisi at 2025-08-20 05:32:02")
+                onRetry()
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 12)
+            .background(Color.blue)
+            .foregroundColor(.white)
+            .cornerRadius(8)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 40)
+        .onAppear {
+            print("❌ Error state displayed: \(errorMessage) - User: gamikapunsisi at 2025-08-20 05:32:02")
+        }
+    }
+}
+
+// MARK: - Empty State View
+struct EmptyStateView: View {
+    let isSearching: Bool
+    let onClearSearch: () -> Void
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: isSearching ? "magnifyingglass" : "briefcase")
+                .font(.system(size: 48))
+                .foregroundColor(.gray)
+            
+            Text(isSearching ? "No services found" : "No services available")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(.primary)
+            
+            Text(isSearching ?
+                 "Try searching with different keywords" :
+                 "Check back later for new services")
+                .font(.system(size: 14, weight: .regular))
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            
+            if isSearching {
+                Button("Clear Search") {
+                    print("🗑️ Clear search tapped - User: gamikapunsisi at 2025-08-20 05:32:02")
+                    onClearSearch()
+                }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 12)
+                .background(Color.blue)
+                .foregroundColor(.white)
+                .cornerRadius(8)
+            } else {
+                Text("User: gamikapunsisi • 2025-08-20 05:32:02")
+                    .font(.system(size: 10, weight: .regular))
+                    .foregroundColor(.secondary.opacity(0.5))
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 40)
+        .onAppear {
+            print("📋 Empty state displayed - Search: \(isSearching) - User: gamikapunsisi at 2025-08-20 05:32:02")
+        }
     }
 }
 
 #Preview {
     ClientDashboardView()
 }
-
-//
-//import SwiftUI
-//
-//struct ClientDashboardView: View {
-//    @State private var searchText = ""
-//    
-//    var body: some View {
-//        NavigationView {
-//            ZStack {
-//                // Background gradient
-//                LinearGradient(
-//                    gradient: Gradient(colors: [Color.green.opacity(0.3), Color.blue.opacity(0.2)]),
-//                    startPoint: .topLeading,
-//                    endPoint: .bottomTrailing
-//                )
-//                .ignoresSafeArea()
-//                
-//                ScrollView {
-//                    VStack(spacing: 0) {
-//                        // Header Section with Hero Image
-//                        ZStack {
-//                            // Background image placeholder
-//                            RoundedRectangle(cornerRadius: 0)
-//                                .fill(
-//                                    LinearGradient(
-//                                        gradient: Gradient(colors: [Color.green.opacity(0.7), Color.orange.opacity(0.6)]),
-//                                        startPoint: .topLeading,
-//                                        endPoint: .bottomTrailing
-//                                    )
-//                                )
-//                                .frame(height: 280)
-//                                .overlay(
-//                                    // Simulated background pattern
-//                                    Image(systemName: "scissors")
-//                                        .font(.system(size: 60))
-//                                        .foregroundColor(.white.opacity(0.3))
-//                                        .offset(x: 80, y: 20)
-//                                )
-//                            
-//                            VStack(spacing: 16) {
-//                                // Logo and Title
-//                                VStack(spacing: 8) {
-//                                    Text("TASK")
-//                                        .font(.system(size: 36, weight: .bold, design: .rounded))
-//                                        .foregroundColor(.black) +
-//                                    Text("FLOW")
-//                                        .font(.system(size: 36, weight: .bold, design: .rounded))
-//                                        .foregroundColor(.purple)
-//                                    
-//                                    Text("Experts at cutting and coloring hair of all type")
-//                                        .font(.system(size: 16, weight: .medium))
-//                                        .foregroundColor(.white)
-//                                        .multilineTextAlignment(.center)
-//                                        .padding(.horizontal, 20)
-//                                }
-//                                
-//                                // Search Bar
-//                                HStack {
-//                                    Image(systemName: "magnifyingglass")
-//                                        .foregroundColor(.gray)
-//                                    
-//                                    TextField("Search", text: $searchText)
-//                                        .textFieldStyle(PlainTextFieldStyle())
-//                                }
-//                                .padding(.horizontal, 16)
-//                                .padding(.vertical, 12)
-//                                .background(Color.white.opacity(0.9))
-//                                .cornerRadius(25)
-//                                .padding(.horizontal, 30)
-//                            }
-//                        }
-//                        
-//                        // Services Section
-//                        VStack(alignment: .leading, spacing: 20) {
-//                            HStack {
-//                                Text("Services")
-//                                    .font(.system(size: 28, weight: .bold))
-//                                    .foregroundColor(.black)
-//                                
-//                                Text("(8)")
-//                                    .font(.system(size: 28, weight: .bold))
-//                                    .foregroundColor(.gray)
-//                                
-//                                Spacer()
-//                            }
-//                            .padding(.horizontal, 20)
-//                            .padding(.top, 30)
-//                            
-//                            // Services Grid
-//                            LazyVGrid(columns: [
-//                                GridItem(.flexible(), spacing: 10),
-//                                GridItem(.flexible(), spacing: 10)
-//                            ], spacing: 15) {
-//                                ServiceCard(title: "Plumber", icon: "wrench.and.screwdriver.fill", colors: [.blue.opacity(0.7), .gray.opacity(0.5)])
-//                                ServiceCard(title: "Painter", icon: "paintbrush.fill", colors: [.yellow.opacity(0.8), .orange.opacity(0.6)])
-//                                ServiceCard(title: "Coconut Picker", icon: "leaf.fill", colors: [.green.opacity(0.7), .brown.opacity(0.4)])
-//                                ServiceCard(title: "House Cleaner", icon: "house.fill", colors: [.gray.opacity(0.6), .white.opacity(0.8)])
-//                                ServiceCard(title: "Carpenter", icon: "hammer.fill", colors: [.brown.opacity(0.7), .orange.opacity(0.5)])
-//                                ServiceCard(title: "Gardener", icon: "leaf.arrow.triangle.circlepath", colors: [.green.opacity(0.8), .mint.opacity(0.6)])
-//                                ServiceCard(title: "Landscaping Worker", icon: "mountain.2.fill", colors: [.gray.opacity(0.8), .green.opacity(0.4)])
-//                                ServiceCard(title: "Grass Cutter", icon: "scissors", colors: [.green.opacity(0.9), .green.opacity(0.7)])
-//                            }
-//                            .padding(.horizontal, 20)
-//                            
-//                            Spacer(minLength: 100)
-//                        }
-//                    }
-//                }
-//            }
-//            .navigationBarHidden(true)
-//        }
-//        .overlay(
-//            // Bottom Tab Bar
-//            VStack {
-//                Spacer()
-//                CustomTabBar()
-//            }
-//        )
-//    }
-//}
-//
-//struct ServiceCard: View {
-//    let title: String
-//    let icon: String
-//    let colors: [Color]
-//    
-//    var body: some View {
-//        ZStack {
-//            RoundedRectangle(cornerRadius: 16)
-//                .fill(
-//                    LinearGradient(
-//                        gradient: Gradient(colors: colors),
-//                        startPoint: .topLeading,
-//                        endPoint: .bottomTrailing
-//                    )
-//                )
-//                .frame(height: 120)
-//                .overlay(
-//                    RoundedRectangle(cornerRadius: 16)
-//                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
-//                )
-//            
-//            VStack {
-//                Image(systemName: icon)
-//                    .font(.system(size: 24, weight: .medium))
-//                    .foregroundColor(.white.opacity(0.9))
-//                    .padding(.bottom, 8)
-//                
-//                Text(title)
-//                    .font(.system(size: 16, weight: .semibold))
-//                    .foregroundColor(.white)
-//                    .multilineTextAlignment(.center)
-//                    .lineLimit(2)
-//            }
-//            .padding()
-//        }
-//        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
-//    }
-//}
-//
-//struct CustomTabBar: View {
-//    @State private var selectedTab = 0
-//    
-//    var body: some View {
-//        HStack {
-//            TabBarButton(icon: "house.fill", isSelected: selectedTab == 0) {
-//                selectedTab = 0
-//            }
-//            
-//            Spacer()
-//            
-//            TabBarButton(icon: "calendar", isSelected: selectedTab == 1) {
-//                selectedTab = 1
-//            }
-//            
-//            Spacer()
-//            
-//            TabBarButton(icon: "person.fill", isSelected: selectedTab == 2) {
-//                selectedTab = 2
-//            }
-//        }
-//        .padding(.horizontal, 60)
-//        .padding(.vertical, 16)
-//        .background(
-//            RoundedRectangle(cornerRadius: 30)
-//                .fill(Color.black)
-//                .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: -2)
-//        )
-//        .padding(.horizontal, 30)
-//        .padding(.bottom, 30)
-//    }
-//}
-//
-//struct TabBarButton: View {
-//    let icon: String
-//    let isSelected: Bool
-//    let action: () -> Void
-//    
-//    var body: some View {
-//        Button(action: action) {
-//            ZStack {
-//                if isSelected {
-//                    Circle()
-//                        .fill(Color.white)
-//                        .frame(width: 50, height: 50)
-//                        .overlay(
-//                            Image(systemName: "calendar")
-//                                .font(.system(size: 16, weight: .medium))
-//                                .foregroundColor(.black)
-//                        )
-//                } else {
-//                    Image(systemName: icon)
-//                        .font(.system(size: 24, weight: .medium))
-//                        .foregroundColor(.white)
-//                }
-//            }
-//        }
-//        .buttonStyle(PlainButtonStyle())
-//    }
-//}
-//
-//#Preview {
-//    ClientDashboardView()
-//        .preferredColorScheme(.light)
-//}
-//
-//// Additional Views for Navigation
-//struct ServiceDetailView: View {
-//    let serviceName: String
-//    
-//    var body: some View {
-//        VStack {
-//            Text(serviceName)
-//                .font(.largeTitle)
-//                .padding()
-//            
-//            Text("Service details and booking options would go here")
-//                .padding()
-//            
-//            Spacer()
-//        }
-//        .navigationTitle(serviceName)
-//        .navigationBarTitleDisplayMode(.inline)
-//    }
-//}
