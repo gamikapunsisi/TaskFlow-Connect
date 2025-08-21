@@ -3,7 +3,7 @@
 //  TaskFlow
 //
 //  Created by Gamika Punsisi on 2025-08-20.
-//  Updated: 2025-08-20 06:12:04 UTC
+//  Updated: 2025-08-20 13:21:20 UTC
 //
 
 import SwiftUI
@@ -12,26 +12,34 @@ import Firebase
 
 @main
 struct TaskFlowApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject private var authVM = AuthViewModel()
+    @StateObject private var notificationManager = NotificationManager.shared
+
     
     init() {
         configureApp()
-        print("🚀 TaskFlowApp initialized - User: gamikapunsisi at 2025-08-20 06:12:04")
+        print("🚀 TaskFlowApp initialized - User: gamikapunsisi at 2025-08-20 13:21:20")
     }
     
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(authVM)
+                .environmentObject(notificationManager)
                 .onAppear {
+                    print("📱 TaskFlowApp appeared - User: gamikapunsisi at 2025-08-20 13:21:20")
                     handleAppLaunch()
+                }
+                .onChange(of: notificationManager.isAuthorized) { oldValue, newValue in
+                    print("🔔 Notification authorization changed: \(newValue ? "✅ Authorized" : "❌ Not Authorized")")
                 }
         }
     }
     
     // MARK: - App Configuration
     private func configureApp() {
-        print("⚙️ Configuring TaskFlow App - User: gamikapunsisi at 2025-08-20 06:12:04")
+        print("⚙️ Configuring TaskFlow App - User: gamikapunsisi at 2025-08-20 13:21:20")
         
         // Check if we're in UI testing mode
         if isUITesting {
@@ -40,33 +48,15 @@ struct TaskFlowApp: App {
             return
         }
         
-        // Configure Firebase for production/development
-        configureFirebase()
+        // Note: Firebase is configured in AppDelegate, not here
+        print("🔥 Firebase will be configured by AppDelegate - User: gamikapunsisi at 2025-08-20 13:21:20")
         
         // Set up crash reporting and analytics
         setupProductionEnvironment()
     }
     
-    private func configureFirebase() {
-        do {
-            // Ensure Firebase is only configured once
-            if FirebaseApp.app() == nil {
-                FirebaseApp.configure()
-                print("✅ Firebase configured successfully - User: gamikapunsisi at 2025-08-20 06:12:04")
-            } else {
-                print("ℹ️ Firebase already configured - User: gamikapunsisi at 2025-08-20 06:12:04")
-            }
-        } catch {
-            print("❌ Firebase configuration failed: \(error.localizedDescription) - User: gamikapunsisi at 2025-08-20 06:12:04")
-            // Don't crash the app, just log the error
-            #if DEBUG
-            fatalError("Firebase configuration failed in DEBUG mode: \(error)")
-            #endif
-        }
-    }
-    
     private func setupUITestingMode() {
-        print("🧪 Setting up UI Testing environment - User: gamikapunsisi at 2025-08-20 06:12:04")
+        print("🧪 Setting up UI Testing environment - User: gamikapunsisi at 2025-08-20 13:21:20")
         
         // Disable animations for faster testing
         if ProcessInfo.processInfo.arguments.contains("DISABLE_ANIMATIONS") {
@@ -94,10 +84,10 @@ struct TaskFlowApp: App {
         // For UI testing, we might want to use Firebase emulator or skip Firebase entirely
         if ProcessInfo.processInfo.environment["USE_FIREBASE_EMULATOR"] == "true" {
             // Configure Firebase emulator if needed
-            print("🔧 Would configure Firebase emulator here - User: gamikapunsisi at 2025-08-20 06:12:04")
+            print("🔧 Would configure Firebase emulator here - User: gamikapunsisi at 2025-08-20 13:21:20")
         } else {
             // Skip Firebase configuration for pure UI testing
-            print("⏭️ Skipping Firebase configuration for UI testing - User: gamikapunsisi at 2025-08-20 06:12:04")
+            print("⏭️ Skipping Firebase configuration for UI testing - User: gamikapunsisi at 2025-08-20 13:21:20")
         }
     }
     
@@ -116,20 +106,20 @@ struct TaskFlowApp: App {
             UserDefaults.standard.set("Gamika Punsisi", forKey: "MOCK_USER_NAME")
             UserDefaults.standard.set("test-user-uid-123", forKey: "MOCK_USER_UID")
             
-            print("🧪 Mock authentication configured - Role: \(mockRole) - User: gamikapunsisi at 2025-08-20 06:12:04")
+            print("🧪 Mock authentication configured - Role: \(mockRole) - User: gamikapunsisi at 2025-08-20 13:21:20")
         } else {
             UserDefaults.standard.set(false, forKey: "MOCK_AUTHENTICATED")
-            print("🧪 Mock authentication disabled - User: gamikapunsisi at 2025-08-20 06:12:04")
+            print("🧪 Mock authentication disabled - User: gamikapunsisi at 2025-08-20 13:21:20")
         }
     }
     
     private func setupProductionEnvironment() {
         #if DEBUG
-        print("🔧 Running in DEBUG mode - User: gamikapunsisi at 2025-08-20 06:12:04")
+        print("🔧 Running in DEBUG mode - User: gamikapunsisi at 2025-08-20 13:21:20")
         // Enable additional debugging
         UserDefaults.standard.set(true, forKey: "ENABLE_DEBUG_LOGGING")
         #else
-        print("🚀 Running in PRODUCTION mode - User: gamikapunsisi at 2025-08-20 06:12:04")
+        print("🚀 Running in PRODUCTION mode - User: gamikapunsisi at 2025-08-20 13:21:20")
         // Disable debug features
         UserDefaults.standard.set(false, forKey: "ENABLE_DEBUG_LOGGING")
         #endif
@@ -138,13 +128,13 @@ struct TaskFlowApp: App {
         if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
            let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String {
             UserDefaults.standard.set("\(version) (\(build))", forKey: "APP_VERSION")
-            print("📱 TaskFlow Version: \(version) (\(build)) - User: gamikapunsisi at 2025-08-20 06:12:04")
+            print("📱 TaskFlow Version: \(version) (\(build)) - User: gamikapunsisi at 2025-08-20 13:21:20")
         }
     }
     
     // MARK: - App Launch Handling
     private func handleAppLaunch() {
-        print("🚀 TaskFlow App Launched - User: gamikapunsisi at 2025-08-20 06:12:04")
+        print("🚀 TaskFlow App Launched - User: gamikapunsisi at 2025-08-20 13:21:20")
         
         // Handle different launch scenarios
         if isUITesting {
@@ -158,7 +148,7 @@ struct TaskFlowApp: App {
     }
     
     private func handleUITestingLaunch() {
-        print("🧪 Handling UI Testing launch - User: gamikapunsisi at 2025-08-20 06:12:04")
+        print("🧪 Handling UI Testing launch - User: gamikapunsisi at 2025-08-20 13:21:20")
         
         // Set up mock authentication state after a brief delay
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -170,7 +160,7 @@ struct TaskFlowApp: App {
     }
     
     private func handleNormalLaunch() {
-        print("✅ Handling normal app launch - User: gamikapunsisi at 2025-08-20 06:12:04")
+        print("✅ Handling normal app launch - User: gamikapunsisi at 2025-08-20 13:21:20")
         
         // Perform any necessary app setup
         performAppWarmup()
@@ -181,7 +171,7 @@ struct TaskFlowApp: App {
     
     private func setupMockAuthenticationState() {
         guard UserDefaults.standard.bool(forKey: "MOCK_AUTHENTICATED") else {
-            print("🧪 Mock authentication not enabled - User: gamikapunsisi at 2025-08-20 06:12:04")
+            print("🧪 Mock authentication not enabled - User: gamikapunsisi at 2025-08-20 13:21:20")
             return
         }
         
@@ -192,34 +182,39 @@ struct TaskFlowApp: App {
             let mockRoleString = UserDefaults.standard.string(forKey: "MOCK_USER_ROLE") ?? "client"
             if let mockRole = UserRole(rawValue: mockRoleString) {
                 self.authVM.role = mockRole
-                print("🧪 Applied mock authentication - Role: \(mockRole) - User: gamikapunsisi at 2025-08-20 06:12:04")
+                print("🧪 Applied mock authentication - Role: \(mockRole) - User: gamikapunsisi at 2025-08-20 13:21:20")
             } else {
                 // Default to client for UI testing
                 self.authVM.role = .client
-                print("🧪 Applied default client role for testing - User: gamikapunsisi at 2025-08-20 06:12:04")
+                print("🧪 Applied default client role for testing - User: gamikapunsisi at 2025-08-20 13:21:20")
             }
         }
     }
     
     private func disableBackgroundTasks() {
         // Disable background tasks that might interfere with UI testing
-        print("🔇 Background tasks disabled for testing - User: gamikapunsisi at 2025-08-20 06:12:04")
+        print("🔇 Background tasks disabled for testing - User: gamikapunsisi at 2025-08-20 13:21:20")
     }
     
     private func performAppWarmup() {
         // Perform any necessary warmup tasks
         // This could include preloading data, checking permissions, etc.
-        print("🔥 Performing app warmup - User: gamikapunsisi at 2025-08-20 06:12:04")
+        print("🔥 Performing app warmup - User: gamikapunsisi at 2025-08-20 13:21:20")
+        
+        // Wait for Firebase to be configured in AppDelegate before using it
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            print("🔥 Firebase should now be configured by AppDelegate - User: gamikapunsisi at 2025-08-20 13:21:20")
+        }
     }
     
     private func checkAppStatus() {
         // Check if app needs updates or if there are any maintenance notices
-        print("🔍 Checking app status - User: gamikapunsisi at 2025-08-20 06:12:04")
+        print("🔍 Checking app status - User: gamikapunsisi at 2025-08-20 13:21:20")
     }
     
     private func logSystemInformation() {
         let device = UIDevice.current
-        print("📱 Device Info - User: gamikapunsisi at 2025-08-20 06:12:04:")
+        print("📱 Device Info - User: gamikapunsisi at 2025-08-20 13:21:20:")
         print("   - Model: \(device.model)")
         print("   - System: \(device.systemName) \(device.systemVersion)")
         print("   - Name: \(device.name)")
@@ -311,6 +306,6 @@ struct LaunchConfiguration {
         disableAnimations = ProcessInfo.processInfo.arguments.contains("DISABLE_ANIMATIONS")
         disableNetwork = ProcessInfo.processInfo.arguments.contains("DISABLE_NETWORK")
         
-        print("🔧 LaunchConfiguration created - UI Testing: \(isUITesting) - User: gamikapunsisi at 2025-08-20 06:12:04")
+        print("🔧 LaunchConfiguration created - UI Testing: \(isUITesting) - User: gamikapunsisi at 2025-08-20 13:21:20")
     }
 }

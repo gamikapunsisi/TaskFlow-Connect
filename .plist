@@ -1,34 +1,66 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<dict>
-	<key>API_KEY</key>
-	<string>AIzaSyB6QvrV0Jy_t2mU7TRvlZUS7oirNazDqn4</string>
-	<key>GCM_SENDER_ID</key>
-	<string>190188851131</string>
-	<key>PLIST_VERSION</key>
-	<string>1</string>
-	<key>BUNDLE_ID</key>
-	<string>taskflow</string>
-	<key>PROJECT_ID</key>
-	<string>tashflow-bdcfb</string>
-	<key>STORAGE_BUCKET</key>
-	<string>tashflow-bdcfb.firebasestorage.app</string>
-	<key>IS_ADS_ENABLED</key>
-	<false></false>
-	<key>IS_ANALYTICS_ENABLED</key>
-	<false></false>
-	<key>IS_APPINVITE_ENABLED</key>
-	<true></true>
-	<key>IS_GCM_ENABLED</key>
-	<true></true>
-	<key>IS_SIGNIN_ENABLED</key>
-	<true></true>
-	<key>GOOGLE_APP_ID</key>
-	<string>1:190188851131:ios:7f757325a195ba085a7e9e</string>
-    <key>NSCameraUsageDescription</key>
-    <string>This app needs access to camera to take photos for services</string>
-    <key>NSPhotoLibraryUsageDescription</key>
-    <string>This app needs access to photo library to select images for services</string>
-</dict>
+    <dict>
+        <key>API_KEY</key>
+        <string>AIzaSyB6QvrV0Jy_t2mU7TRvlZUS7oirNazDqn4</string>
+        <key>GCM_SENDER_ID</key>
+        <string>190188851131</string>
+        <key>PLIST_VERSION</key>
+        <string>1</string>
+        <key>BUNDLE_ID</key>
+        <string>taskflow</string>
+        <key>PROJECT_ID</key>
+        <string>tashflow-bdcfb</string>
+        <key>STORAGE_BUCKET</key>
+        <string>tashflow-bdcfb.firebasestorage.app</string>
+        <key>IS_ADS_ENABLED</key>
+        <false></false>
+        <key>IS_ANALYTICS_ENABLED</key>
+        <false></false>
+        <key>IS_APPINVITE_ENABLED</key>
+        <true></true>
+        <key>IS_GCM_ENABLED</key>
+        <true></true>
+        <key>IS_SIGNIN_ENABLED</key>
+        <true></true>
+        <key>GOOGLE_APP_ID</key>
+        <string>1:190188851131:ios:7f757325a195ba085a7e9e</string>
+        <key>NSCameraUsageDescription</key>
+        <string>This app needs access to camera to take photos for services</string>
+        <key>NSPhotoLibraryUsageDescription</key>
+        <string>This app needs access to photo library to select images for services</string>
+        <!-- Push Notifications -->
+          <key>UIBackgroundModes</key>
+          <array>
+              <string>remote-notification</string>
+          </array>
+          
+          <!-- Notification Usage Description -->
+          <key>NSUserNotificationUsageDescription</key>
+          <string>TaskFlow needs notifications to keep you updated about your booking status, reminders, and important updates.</string>
+          
+          <!-- App Transport Security -->
+          <key>NSAppTransportSecurity</key>
+          <dict>
+              <key>NSAllowsArbitraryLoads</key>
+              <true/>
+          </dict>
+          
+          <!-- Bundle Display Name -->
+          <key>CFBundleDisplayName</key>
+          <string>TaskFlow</string>
+          
+          <!-- Bundle Identifier -->
+          <key>CFBundleIdentifier</key>
+          <string>com.gamikapunsisi.taskflow</string>
+          
+          <!-- Version -->
+          <key>CFBundleShortVersionString</key>
+          <string>1.0</string>
+          
+          <!-- Build -->
+          <key>CFBundleVersion</key>
+          <string>1</string>
+    </dict>
 </plist>

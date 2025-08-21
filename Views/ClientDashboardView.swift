@@ -1,11 +1,22 @@
+//
+//  ClientDashboardView.swift
+//  TaskFlow
+//
+//  Created by Gamika Punsisi on 2025-08-20.
+//  Updated: 2025-08-20 16:02:31 UTC
+//
+
 import SwiftUI
 import Firebase
 
 struct ClientDashboardView: View {
     @StateObject private var serviceManager = ServiceManager()
-    @StateObject private var bookingManager = BookingManager() // ✅ Create BookingManager here
-    @State private var searchText = ""
+    @StateObject private var bookingManager = BookingManager()
+    @EnvironmentObject var notificationManager: NotificationManager
+    @EnvironmentObject var authVM: AuthViewModel
+    @State private var showingNotificationPermission = false
     @State private var showingProfile = false
+    @State private var searchText = ""
     @State private var selectedService: Service?
     @State private var showingSearchResults = false
     
@@ -36,32 +47,44 @@ struct ClientDashboardView: View {
                 
                 ScrollView {
                     VStack(spacing: 0) {
-                        // MARK: - Hero Section
-                        heroSection
+                        // MARK: - Hero Section with Profile
+                        heroSectionWithProfile
                         
                         // MARK: - Services Section
                         servicesSection
                     }
                 }
                 .refreshable {
-                    print("🔄 Refreshing services - User: gamikapunsisi at 2025-08-20 05:32:02")
+                    print("🔄 Refreshing services - User: gamikapunsisi at 2025-08-20 16:02:31")
                     serviceManager.refreshServices()
                 }
             }
             .navigationBarHidden(true)
         }
         .fullScreenCover(item: $selectedService) { service in
-            BookingNavigationFlow(service: service, bookingManager: bookingManager) // ✅ Pass local BookingManager
+            BookingNavigationFlow(service: service, bookingManager: bookingManager)
+        }
+        .sheet(isPresented: $showingNotificationPermission) {
+            NotificationPermissionView(showingPermissionRequest: $showingNotificationPermission)
+        }
+        .sheet(isPresented: $showingProfile) {
+            ProfileView(authVM: authVM)
         }
         .onAppear {
-            print("🚀 ClientDashboardView appeared - User: gamikapunsisi at 2025-08-20 05:32:02")
+            print("🚀 ClientDashboardView appeared - User: gamikapunsisi at 2025-08-20 16:02:31")
             serviceManager.fetchServices()
+            
+            // Check notification permission after a delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                if !notificationManager.isAuthorized {
+                    showingNotificationPermission = true
+                }
+            }
         }
-        .ignoresSafeArea(.keyboard, edges: .bottom)
     }
     
-    // MARK: - Hero Section
-    private var heroSection: some View {
+    // MARK: - Hero Section with Profile Icon
+    private var heroSectionWithProfile: some View {
         ZStack {
             // Background with Gradient
             LinearGradient(
@@ -81,29 +104,83 @@ struct ClientDashboardView: View {
             )
             .frame(height: 280)
             
-            VStack(spacing: 20) {
+            VStack(spacing: 0) {
+                // Top section with profile icon
+                HStack {
+                    Spacer()
+                    
+                    // Profile Button
+                    Button(action: {
+                        print("👤 Profile icon tapped - User: gamikapunsisi at 2025-08-20 16:02:31")
+                        showingProfile = true
+                    }) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.2))
+                                .frame(width: 44, height: 44)
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                )
+                            
+                            // Profile image or default icon - Fixed to use Firebase User properties
+                            if let photoURL = authVM.currentUser?.photoURL?.absoluteString, !photoURL.isEmpty {
+                                AsyncImage(url: URL(string: photoURL)) { image in
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 36, height: 36)
+                                        .clipShape(Circle())
+                                } placeholder: {
+                                    Image(systemName: "person.circle.fill")
+                                        .font(.system(size: 24))
+                                        .foregroundColor(.white.opacity(0.9))
+                                }
+                            } else {
+                                // Use initials or default icon
+                                if let displayName = authVM.currentUser?.displayName, !displayName.isEmpty {
+                                    Text(getInitials(from: displayName))
+                                        .font(.system(size: 18, weight: .bold))
+                                        .foregroundColor(.white)
+                                } else {
+                                    Image(systemName: "person.circle.fill")
+                                        .font(.system(size: 24))
+                                        .foregroundColor(.white.opacity(0.9))
+                                }
+                            }
+                        }
+                    }
+                    .accessibilityIdentifier("profile-button")
+                    .accessibilityLabel("Profile")
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 10)
+                
                 Spacer()
                 
-                // TASKFLOW Title
-                HStack {
-                    Text("TASK")
-                        .font(.system(size: 32, weight: .heavy, design: .default))
-                        .foregroundColor(.white)
-                    Text("FLOW")
-                        .font(.system(size: 32, weight: .heavy, design: .default))
-                        .foregroundColor(.purple)
+                // Center content
+                VStack(spacing: 20) {
+                    // TASKFLOW Title
+                    HStack {
+                        Text("TASK")
+                            .font(.system(size: 32, weight: .heavy, design: .default))
+                            .foregroundColor(.white)
+                        Text("FLOW")
+                            .font(.system(size: 32, weight: .heavy, design: .default))
+                            .foregroundColor(.purple)
+                    }
+                    .accessibilityIdentifier("TaskFlowTitle")
+                    
+                    // Dynamic Subtitle
+                    Text(getSubtitleText())
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.white.opacity(0.9))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                    
+                    // Search Bar
+                    searchBar
                 }
-                .accessibilityIdentifier("TaskFlowTitle")
-                
-                // Dynamic Subtitle
-                Text(getSubtitleText())
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.white.opacity(0.9))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 40)
-                
-                // Search Bar
-                searchBar
                 
                 Spacer()
             }
@@ -111,7 +188,7 @@ struct ClientDashboardView: View {
         .frame(height: 280)
     }
     
-    // MARK: - Search Bar (Fixed onChange)
+    // MARK: - Search Bar
     private var searchBar: some View {
         HStack {
             HStack {
@@ -121,9 +198,9 @@ struct ClientDashboardView: View {
                     .accentColor(.white)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
-                    .onChange(of: searchText) { oldValue, newValue in // ✅ Fixed iOS 17+ syntax
+                    .onChange(of: searchText) { oldValue, newValue in
                         showingSearchResults = !newValue.isEmpty
-                        print("🔍 Search text changed: '\(newValue)' - User: gamikapunsisi at 2025-08-20 05:32:02")
+                        print("🔍 Search text changed: '\(newValue)' - User: gamikapunsisi at 2025-08-20 16:02:31")
                     }
                 
                 if !searchText.isEmpty {
@@ -131,7 +208,7 @@ struct ClientDashboardView: View {
                         searchText = ""
                         showingSearchResults = false
                         hideKeyboard()
-                        print("❌ Search cleared - User: gamikapunsisi at 2025-08-20 05:32:02")
+                        print("❌ Search cleared - User: gamikapunsisi at 2025-08-20 16:02:31")
                     }) {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 16, weight: .medium))
@@ -178,7 +255,7 @@ struct ClientDashboardView: View {
                 
                 // Refresh Button
                 Button(action: {
-                    print("🔄 Manual refresh triggered - User: gamikapunsisi at 2025-08-20 05:32:02")
+                    print("🔄 Manual refresh triggered - User: gamikapunsisi at 2025-08-20 16:02:31")
                     serviceManager.refreshServices()
                 }) {
                     Image(systemName: "arrow.clockwise")
@@ -213,11 +290,11 @@ struct ClientDashboardView: View {
                 servicesGrid
             }
             
-            Spacer(minLength: 120) // Extra space for bottom navigation
+            Spacer(minLength: 120)
         }
     }
     
-    // MARK: - Services Grid (Fixed warning)
+    // MARK: - Services Grid
     private var servicesGrid: some View {
         Group {
             if showingSearchResults {
@@ -227,7 +304,7 @@ struct ClientDashboardView: View {
                 ], spacing: 15) {
                     ForEach(filteredServices, id: \.id) { service in
                         ClientServiceCard(service: service) {
-                            print("🎯 Service card tapped: \(service.name) - User: gamikapunsisi at 2025-08-20 05:32:02")
+                            print("🎯 Service card tapped: \(service.name) - User: gamikapunsisi at 2025-08-20 16:02:31")
                             selectedService = service
                         }
                     }
@@ -240,8 +317,7 @@ struct ClientDashboardView: View {
                             category: category,
                             services: categoryServices,
                             onServiceTap: { service in
-                                print("🎯 Service tapped in category '\(category)': \(service.name) - User: gamikapunsisi at 2025-08-20 05:32:02")
-                                print("🔄 Setting selectedService to trigger fullScreenCover - BookingManager initialized") // ✅ Fixed warning
+                                print("🎯 Service tapped in category '\(category)': \(service.name) - User: gamikapunsisi at 2025-08-20 16:02:31")
                                 selectedService = service
                             }
                         )
@@ -259,6 +335,16 @@ struct ClientDashboardView: View {
         } else {
             return "Choose from \(serviceCount) professional services available"
         }
+    }
+    
+    private func getInitials(from name: String) -> String {
+        let words = name.split(separator: " ")
+        if words.count >= 2 {
+            return String(words[0].first ?? "T") + String(words[1].first ?? "F")
+        } else if let firstWord = words.first {
+            return String(firstWord.prefix(2)).uppercased()
+        }
+        return "TF"
     }
     
     private func categorizeService(_ serviceName: String) -> String {
@@ -284,7 +370,7 @@ struct ClientDashboardView: View {
     private func performSearch() {
         guard !searchText.isEmpty else { return }
         showingSearchResults = true
-        print("🔍 Searching for: '\(searchText)' - User: gamikapunsisi at 2025-08-20 05:32:02")
+        print("🔍 Searching for: '\(searchText)' - User: gamikapunsisi at 2025-08-20 16:02:31")
         print("📊 Found \(filteredServices.count) matching services")
     }
     
@@ -293,14 +379,14 @@ struct ClientDashboardView: View {
     }
 }
 
-// MARK: - Fixed Client Service Card
+// MARK: - Client Service Card
 struct ClientServiceCard: View {
     let service: Service
     let onTap: () -> Void
     
     var body: some View {
         Button(action: {
-            print("🔘 ClientServiceCard button pressed: \(service.name) - User: gamikapunsisi at 2025-08-20 05:32:02")
+            print("🔘 ClientServiceCard button pressed: \(service.name) - User: gamikapunsisi at 2025-08-20 16:02:31")
             onTap()
         }) {
             VStack(alignment: .leading, spacing: 8) {
@@ -354,11 +440,7 @@ struct ClientServiceCard: View {
             .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 2)
         }
         .buttonStyle(PlainButtonStyle())
-        .contentShape(Rectangle()) // This ensures the entire area is tappable
-        .onTapGesture {
-            print("🔘 Alternative tap gesture: \(service.name) - User: gamikapunsisi at 2025-08-20 05:32:02")
-            onTap()
-        }
+        .contentShape(Rectangle())
     }
     
     private func getServiceIcon(_ serviceName: String) -> String {
@@ -413,7 +495,7 @@ struct CategorySectionView: View {
             ], spacing: 15) {
                 ForEach(services, id: \.id) { service in
                     ClientServiceCard(service: service) {
-                        print("📂 Service selected from \(category): \(service.name) - User: gamikapunsisi at 2025-08-20 05:32:02")
+                        print("📂 Service selected from \(category): \(service.name) - User: gamikapunsisi at 2025-08-20 16:02:31")
                         onServiceTap(service)
                     }
                 }
@@ -434,14 +516,14 @@ struct LoadingStateView: View {
             Text("Loading services...")
                 .font(.system(size: 16, weight: .medium))
                 .foregroundColor(.secondary)
-            Text("User: gamikapunsisi • 2025-08-20 05:32:02")
+            Text("User: gamikapunsisi • 2025-08-20 16:02:31")
                 .font(.system(size: 10, weight: .regular))
                 .foregroundColor(.secondary.opacity(0.7))
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 40)
         .onAppear {
-            print("⏳ Loading state displayed - User: gamikapunsisi at 2025-08-20 05:32:02")
+            print("⏳ Loading state displayed - User: gamikapunsisi at 2025-08-20 16:02:31")
         }
     }
 }
@@ -467,7 +549,7 @@ struct ErrorStateView: View {
                 .multilineTextAlignment(.center)
             
             Button("Try Again") {
-                print("🔄 Retry attempt - User: gamikapunsisi at 2025-08-20 05:32:02")
+                print("🔄 Retry attempt - User: gamikapunsisi at 2025-08-20 16:02:31")
                 onRetry()
             }
             .padding(.horizontal, 24)
@@ -479,7 +561,7 @@ struct ErrorStateView: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 40)
         .onAppear {
-            print("❌ Error state displayed: \(errorMessage) - User: gamikapunsisi at 2025-08-20 05:32:02")
+            print("❌ Error state displayed: \(errorMessage) - User: gamikapunsisi at 2025-08-20 16:02:31")
         }
     }
 }
@@ -508,7 +590,7 @@ struct EmptyStateView: View {
             
             if isSearching {
                 Button("Clear Search") {
-                    print("🗑️ Clear search tapped - User: gamikapunsisi at 2025-08-20 05:32:02")
+                    print("🗑️ Clear search tapped - User: gamikapunsisi at 2025-08-20 16:02:31")
                     onClearSearch()
                 }
                 .padding(.horizontal, 24)
@@ -517,7 +599,7 @@ struct EmptyStateView: View {
                 .foregroundColor(.white)
                 .cornerRadius(8)
             } else {
-                Text("User: gamikapunsisi • 2025-08-20 05:32:02")
+                Text("User: gamikapunsisi • 2025-08-20 16:02:31")
                     .font(.system(size: 10, weight: .regular))
                     .foregroundColor(.secondary.opacity(0.5))
             }
@@ -525,11 +607,13 @@ struct EmptyStateView: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 40)
         .onAppear {
-            print("📋 Empty state displayed - Search: \(isSearching) - User: gamikapunsisi at 2025-08-20 05:32:02")
+            print("📋 Empty state displayed - Search: \(isSearching) - User: gamikapunsisi at 2025-08-20 16:02:31")
         }
     }
 }
 
 #Preview {
     ClientDashboardView()
+        .environmentObject(NotificationManager.shared)
+        .environmentObject(AuthViewModel())
 }
