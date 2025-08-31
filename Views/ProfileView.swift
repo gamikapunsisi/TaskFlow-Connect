@@ -436,7 +436,12 @@ struct TaskFlowEditProfileView: View {
     @State private var isLoading = false
     @State private var showingAlert = false
     @State private var alertMessage = ""
+    @FocusState private var focusedField: Field?
     
+    enum Field {
+        case displayName, phoneNumber
+    }
+
     var body: some View {
         NavigationView {
             Form {
@@ -446,6 +451,8 @@ struct TaskFlowEditProfileView: View {
                             .foregroundColor(.blue)
                             .frame(width: 20)
                         TextField("Display Name", text: $displayName)
+                            .focused($focusedField, equals: .displayName)
+                            .onSubmit { focusedField = .phoneNumber }
                     }
                     
                     HStack {
@@ -454,6 +461,8 @@ struct TaskFlowEditProfileView: View {
                             .frame(width: 20)
                         TextField("Phone Number", text: $phoneNumber)
                             .keyboardType(.phonePad)
+                            .focused($focusedField, equals: .phoneNumber)
+                            .onSubmit { focusedField = nil }
                     }
                 }
                 
@@ -483,12 +492,15 @@ struct TaskFlowEditProfileView: View {
                     EmptyView()
                 }
             }
+            .keyboardAvoidance()
+            .keyboardToolbar(dismissAction: { focusedField = nil })
             .navigationTitle("Edit Profile")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {
                         print("❌ Edit profile cancelled - User: gamikapunsisi at 2025-08-20 16:40:15")
+                        focusedField = nil
                         presentationMode.wrappedValue.dismiss()
                     }
                     .disabled(isLoading)
@@ -497,6 +509,7 @@ struct TaskFlowEditProfileView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Save") {
                         print("💾 Save profile changes - User: gamikapunsisi at 2025-08-20 16:40:15")
+                        focusedField = nil
                         saveProfileChanges()
                     }
                     .disabled(isLoading)

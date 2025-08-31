@@ -425,6 +425,7 @@ struct CustomerInfoStep: View {
             }
             .padding(.horizontal, 20)
         }
+        .keyboardAvoidance()
         .onChange(of: bookingData.customerPhone) { oldValue, newValue in
             // Auto-fill when phone number is complete
             if newValue.count >= 10 && oldValue.count < 10 {

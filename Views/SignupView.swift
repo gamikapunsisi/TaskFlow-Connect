@@ -6,8 +6,13 @@ struct SignUpView: View {
     @State private var password = ""
     @State private var confirmPassword = ""
     @State private var selectedRole: UserRole = .tasker  // ✅ Enum, not String
+    @FocusState private var focusedField: Field?
 
     let roles: [UserRole] = [.tasker, .client] // ✅ Enum list
+    
+    enum Field {
+        case email, password, confirmPassword
+    }
 
     var body: some View {
         VStack(spacing: 16) {
@@ -19,21 +24,32 @@ struct SignUpView: View {
             TextField("Email", text: $email)
                 .keyboardType(.emailAddress)
                 .autocapitalization(.none)
+                .focused($focusedField, equals: .email)
                 .padding()
                 .background(Color.gray.opacity(0.2))
                 .cornerRadius(8)
+                .onSubmit { focusedField = .password }
 
             // Password Field
             SecureField("Password", text: $password)
+                .focused($focusedField, equals: .password)
                 .padding()
                 .background(Color.gray.opacity(0.2))
                 .cornerRadius(8)
+                .onSubmit { focusedField = .confirmPassword }
 
             // Confirm Password Field
             SecureField("Confirm Password", text: $confirmPassword)
+                .focused($focusedField, equals: .confirmPassword)
                 .padding()
                 .background(Color.gray.opacity(0.2))
                 .cornerRadius(8)
+                .onSubmit { 
+                    focusedField = nil
+                    if isFormValid {
+                        signUp()
+                    }
+                }
 
             // Role Picker
             Picker("Select Role", selection: $selectedRole) {
@@ -68,6 +84,8 @@ struct SignUpView: View {
             .disabled(!isFormValid || authVM.isLoading)
         }
         .padding()
+        .keyboardAvoidance()
+        .keyboardToolbar(dismissAction: { focusedField = nil })
     }
 
     // MARK: - Validation
@@ -77,6 +95,7 @@ struct SignUpView: View {
 
     // MARK: - Actions
     private func signUp() {
+        focusedField = nil
         authVM.signUp(email: email, password: password, role: selectedRole) // ✅ Pass UserRole directly
     }
 }

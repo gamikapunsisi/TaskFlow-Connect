@@ -94,7 +94,7 @@ struct AddNewServiceView: View {
                     
                     // MARK: - Save Button
                     Button(action: {
-                        dismissKeyboard()
+                        focusedField = nil
                         saveService()
                     }) {
                         if isLoading {
@@ -119,32 +119,21 @@ struct AddNewServiceView: View {
                 }
                 .padding()
             }
+            .keyboardAvoidance()
             .navigationTitle("Add New Service")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {
-                        dismissKeyboard()
+                        focusedField = nil
                         // Add small delay to ensure keyboard is dismissed
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                             presentationMode.wrappedValue.dismiss()
                         }
                     }
                 }
-                
-                // Add toolbar button to dismiss keyboard
-                ToolbarItem(placement: .keyboard) {
-                    HStack {
-                        Spacer()
-                        Button("Done") {
-                            focusedField = nil
-                        }
-                    }
-                }
             }
-            .onTapGesture {
-                dismissKeyboard()
-            }
+            .keyboardToolbar(dismissAction: { focusedField = nil })
             .confirmationDialog("Select Image", isPresented: $showActionSheet) {
                 Button("Camera") {
                     if UIImagePickerController.isSourceTypeAvailable(.camera) {
@@ -175,7 +164,6 @@ struct AddNewServiceView: View {
     // MARK: - Helper Methods
     private func dismissKeyboard() {
         focusedField = nil
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
     
     // MARK: - Form validation
