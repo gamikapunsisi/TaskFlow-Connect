@@ -576,6 +576,7 @@ struct FormFieldView: View {
 
 struct DateTimeStep: View {
     @Binding var bookingData: BookingFormData
+    @FocusState private var isNotesFieldFocused: Bool
     
     var body: some View {
         ScrollView {
@@ -619,6 +620,7 @@ struct DateTimeStep: View {
                     
                     TextEditor(text: $bookingData.notes)
                         .frame(height: 100)
+                        .focused($isNotesFieldFocused)
                         .padding(8)
                         .background(Color(UIColor.secondarySystemBackground))
                         .cornerRadius(8)
@@ -632,6 +634,8 @@ struct DateTimeStep: View {
                 Spacer()
             }
         }
+        .keyboardAvoidance()
+        .keyboardToolbar(dismissAction: { isNotesFieldFocused = false })
         .onAppear {
             print("📅 Date/Time selection - User: gamikapunsisi at 2025-08-20 09:53:32")
         }
