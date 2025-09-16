@@ -1,41 +1,36 @@
-//
-//  UpcomingContractsView.swift
-//  TaskFlow
-//
-//  Created by Gamika Punsisi on 2025-08-17.
-//
-
 import SwiftUI
 
 struct UpcomingContractsView: View {
-    @StateObject private var contractManager = ContractManager()
+    @StateObject private var bookingManager = BookingManager()
+    @State private var selectedDate: Date = Date()
     
-    var todayContracts: [Contract] {
-        contractManager.contractsForDate(contractManager.selectedDate)
+    // Filter bookings for the selected date
+    var bookingsForSelectedDate: [ServiceBooking] {
+        bookingManager.currentBookings.filter {
+            Calendar.current.isDate($0.scheduledDate, inSameDayAs: selectedDate)
+        }
     }
     
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 24) {
-                    // Calendar Week View
                     CalendarWeekView(
-                        selectedDate: $contractManager.selectedDate,
-                        contracts: contractManager.contracts
+                        selectedDate: $selectedDate,
+                        bookings: bookingManager.currentBookings
                     )
                     
-                    // Contracts List
                     VStack(spacing: 16) {
-                        if contractManager.isLoading {
-                            ProgressView("Loading contracts...")
+                        if bookingManager.isLoading {
+                            ProgressView("Loading bookings...")
                                 .frame(maxWidth: .infinity, minHeight: 200)
-                        } else if todayContracts.isEmpty {
+                        } else if bookingsForSelectedDate.isEmpty {
                             VStack(spacing: 16) {
                                 Image(systemName: "calendar.badge.exclamationmark")
                                     .font(.system(size: 50))
                                     .foregroundColor(.gray)
                                 
-                                Text("No contracts scheduled")
+                                Text("No bookings scheduled")
                                     .font(.title2)
                                     .foregroundColor(.secondary)
                                 
@@ -45,17 +40,18 @@ struct UpcomingContractsView: View {
                             }
                             .frame(maxWidth: .infinity, minHeight: 200)
                         } else {
-                            ForEach(todayContracts) { contract in
-                                ContractCardView(contract: contract) {
-                                    contractManager.cancelContract(contract)
+                            ForEach(bookingsForSelectedDate) { booking in
+                                BookingCardView(booking: booking) {
+                                    Task {
+                                        await bookingManager.updateBookingStatus(booking.id, status: .cancelled)
+                                    }
                                 }
                             }
                         }
                     }
                     .padding(.horizontal)
                     
-                    // Error Message
-                    if let errorMessage = contractManager.errorMessage {
+                    if let errorMessage = bookingManager.errorMessage {
                         Text(errorMessage)
                             .foregroundColor(.red)
                             .font(.caption)
@@ -64,10 +60,17 @@ struct UpcomingContractsView: View {
                 }
                 .padding(.vertical)
             }
-            .navigationTitle("Upcoming Contracts")
+            .navigationTitle("Upcoming Bookings")
             .navigationBarTitleDisplayMode(.large)
             .refreshable {
-                contractManager.fetchUpcomingContracts()
+                let userId = "gamikapunsisi"
+                await bookingManager.fetchUserBookings(for: userId)
+            }
+            .onAppear {
+                let userId = "gamikapunsisi"
+                Task {
+                    await bookingManager.fetchUserBookings(for: userId)
+                }
             }
         }
     }
@@ -75,10 +78,48 @@ struct UpcomingContractsView: View {
     private func formattedSelectedDate() -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
-        return formatter.string(from: contractManager.selectedDate)
+        return formatter.string(from: selectedDate)
+    }
+    
+    private func generateWeekDates() -> [Date] {
+        let calendar = Calendar.current
+        let today = Date()
+        let startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today))!
+        return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: startOfWeek) }
     }
 }
 
-#Preview {
-    UpcomingContractsView()
+struct BookingCardView: View {
+    let booking: ServiceBooking
+    var onCancel: () -> Void
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(booking.serviceName)
+                    .font(.headline)
+                Spacer()
+                Text(booking.status.displayName)
+                    .font(.caption)
+                    .foregroundColor(booking.status.color)
+            }
+            Text("Customer: \(booking.customerName)")
+                .font(.subheadline)
+            Text("Date: \(booking.formattedDate) • Time: \(booking.formattedTime)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Text("Address: \(booking.customerAddress)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Button("Cancel Booking") {
+                onCancel()
+            }
+            .foregroundColor(.red)
+            .padding(.top, 4)
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+        .shadow(radius: 2)
+    }
 }

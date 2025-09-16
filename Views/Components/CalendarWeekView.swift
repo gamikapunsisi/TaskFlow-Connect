@@ -1,15 +1,8 @@
-//
-//  CalendarWeekView.swift
-//  TaskFlow
-//
-//  Created by Gamika Punsisi on 2025-08-17.
-//
-
 import SwiftUI
 
 struct CalendarWeekView: View {
     @Binding var selectedDate: Date
-    let contracts: [Contract]
+    let bookings: [ServiceBooking]
     
     private let calendar = Calendar.current
     private let dateFormatter: DateFormatter = {
@@ -67,7 +60,7 @@ struct CalendarWeekView: View {
                     DayView(
                         date: day,
                         selectedDate: $selectedDate,
-                        hasContracts: hasContractsForDate(day)
+                        hasBookings: hasBookingsForDate(day)
                     )
                     .onTapGesture {
                         selectedDate = day
@@ -86,9 +79,9 @@ struct CalendarWeekView: View {
         selectedDate = calendar.date(byAdding: .weekOfYear, value: 1, to: selectedDate) ?? selectedDate
     }
     
-    private func hasContractsForDate(_ date: Date) -> Bool {
-        return contracts.contains { contract in
-            calendar.isDate(contract.scheduledDate.dateValue(), inSameDayAs: date)
+    private func hasBookingsForDate(_ date: Date) -> Bool {
+        return bookings.contains { booking in
+            calendar.isDate(booking.scheduledDate, inSameDayAs: date)
         }
     }
 }
@@ -96,7 +89,7 @@ struct CalendarWeekView: View {
 struct DayView: View {
     let date: Date
     @Binding var selectedDate: Date
-    let hasContracts: Bool
+    let hasBookings: Bool
     
     private let calendar = Calendar.current
     
@@ -143,7 +136,7 @@ struct DayView: View {
                     .fontWeight(isSelected ? .bold : .medium)
                     .foregroundColor(isSelected ? .white : .primary)
                 
-                if hasContracts && !isSelected {
+                if hasBookings && !isSelected {
                     Circle()
                         .fill(Color.red)
                         .frame(width: 6, height: 6)

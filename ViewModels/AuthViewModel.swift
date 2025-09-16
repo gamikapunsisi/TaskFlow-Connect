@@ -3,7 +3,7 @@
 //  TaskFlow
 //
 //  Created by Gamika Punsisi on 2025-08-20.
-//  Updated: 2025-08-20 06:16:17 UTC
+//  Updated: 2025-08-21 16:55:48 UTC
 //
 
 import SwiftUI
@@ -11,6 +11,7 @@ import FirebaseAuth
 import FirebaseFirestore
 import FirebaseCore
 import Combine
+import LocalAuthentication
 
 enum UserRole: String, Codable, CaseIterable {
     case tasker = "tasker"
@@ -43,9 +44,23 @@ class AuthViewModel: ObservableObject {
     @Published var currentUser: User? = nil
     @Published var userProfile: UserProfile? = nil
     
+    // ✅ Biometric Authentication Properties
+    @Published var showBiometricLogin = false
+    @Published var biometricAuthResult: String? = nil
+    @Published var isAuthenticatingBiometric = false
+    @Published var shouldShowBiometricPrompt = false
+    
     private let db = Firestore.firestore()
     private var authStateListenerHandle: AuthStateDidChangeListenerHandle?
     private var cancellables = Set<AnyCancellable>()
+    
+    // ✅ Biometric Manager
+    private let biometricManager = BiometricAuthManager.shared
+    
+    // Stored credentials for biometric authentication
+    private let keychainService = "com.taskflow.credentials"
+    private let emailKey = "stored_email"
+    private let passwordKey = "stored_password"
     
     // MARK: - UI Testing Properties
     private var isUITestingMode: Bool {
@@ -56,26 +71,280 @@ class AuthViewModel: ObservableObject {
     }
     
     init() {
-        print("🔧 AuthViewModel initialized - User: gamikapunsisi at 2025-08-20 06:16:17")
+        print("🔧 AuthViewModel initialized with biometric support - User: gamikapunsisi at 2025-08-21 16:55:48")
         
         configureAuthentication()
         setupAuthStateListener()
+        setupBiometricAuthentication()
     }
     
     deinit {
         if let handle = authStateListenerHandle {
             Auth.auth().removeStateDidChangeListener(handle)
         }
-        print("🔧 AuthViewModel deinitialized - User: gamikapunsisi at 2025-08-20 06:16:17")
+        print("🔧 AuthViewModel deinitialized - User: gamikapunsisi at 2025-08-21 16:55:48")
+    }
+    
+    // MARK: - ✅ Biometric Authentication Setup
+    
+    private func setupBiometricAuthentication() {
+        print("🔐 Setting up biometric authentication - User: gamikapunsisi at 2025-08-21 16:55:48")
+        
+        // Check if user has stored credentials and biometric is enabled
+        if hasStoredCredentials() && biometricManager.shouldShowBiometricOption() {
+            shouldShowBiometricPrompt = true
+            print("✅ Biometric prompt will be available")
+        }
+    }
+    
+    // MARK: - ✅ Biometric Login Methods
+    
+    func loginWithBiometrics() async {
+        print("🔐 Attempting biometric login - User: gamikapunsisi at 2025-08-21 16:55:48")
+        
+        await MainActor.run {
+            self.isAuthenticatingBiometric = true
+            self.biometricAuthResult = nil
+        }
+        
+        // Perform biometric authentication
+        let authResult = await biometricManager.authenticateUser(reason: "Sign in to TaskFlow securely")
+        
+        switch authResult {
+        case .success:
+            await handleSuccessfulBiometricAuth()
+            
+        case .failure(let error):
+            await handleBiometricAuthError(error)
+            
+        case .cancelled:
+            await MainActor.run {
+                self.isAuthenticatingBiometric = false
+                self.biometricAuthResult = "Authentication cancelled"
+            }
+            print("⚠️ Biometric authentication cancelled by user")
+        }
+    }
+    
+    private func handleSuccessfulBiometricAuth() async {
+        print("✅ Biometric authentication successful, retrieving stored credentials")
+        
+        // Retrieve stored credentials
+        guard let email = getStoredCredential(for: emailKey),
+              let password = getStoredCredential(for: passwordKey) else {
+            await MainActor.run {
+                self.isAuthenticatingBiometric = false
+                self.biometricAuthResult = "No stored credentials found"
+            }
+            print("❌ No stored credentials available for biometric login")
+            return
+        }
+        
+        // Perform Firebase login with stored credentials
+        await performFirebaseLogin(email: email, password: password, isBiometric: true)
+    }
+    
+    private func handleBiometricAuthError(_ error: BiometricAuthError) async {
+        await MainActor.run {
+            self.isAuthenticatingBiometric = false
+            self.biometricAuthResult = error.errorDescription ?? "Biometric authentication failed"
+        }
+        
+        print("❌ Biometric authentication failed: \(error.errorDescription ?? "Unknown error")")
+    }
+    
+    // MARK: - ✅ Enhanced Login with Biometric Support
+    
+    func login(email: String, password: String) {
+        print("🔄 Starting login process for: \(email) - User: gamikapunsisi at 2025-08-21 16:55:48")
+        
+        // Handle UI testing mode
+        if isUITestingMode {
+            mockLogin(email: email)
+            return
+        }
+        
+        // Validation
+        guard validateLoginInput(email: email, password: password) else { return }
+        
+        Task {
+            await performFirebaseLogin(email: email, password: password)
+        }
+    }
+    
+    // ✅ Enhanced login method with biometric credential storage option
+    func loginWithBiometricSetup(email: String, password: String, enableBiometric: Bool = false) {
+        print("🔄 Starting enhanced login with biometric setup option - User: gamikapunsisi at 2025-08-21 16:55:48")
+        
+        // Handle UI testing mode
+        if isUITestingMode {
+            mockLogin(email: email)
+            return
+        }
+        
+        // Validation
+        guard validateLoginInput(email: email, password: password) else { return }
+        
+        Task {
+            await performFirebaseLogin(email: email, password: password, storeBiometric: enableBiometric)
+        }
+    }
+    
+    private func performFirebaseLogin(email: String, password: String, isBiometric: Bool = false, storeBiometric: Bool = false) async {
+        await MainActor.run {
+            if isBiometric {
+                self.isAuthenticatingBiometric = true
+            } else {
+                self.isLoading = true
+            }
+            self.errorMessage = nil
+        }
+        
+        do {
+            let result = try await Auth.auth().signIn(withEmail: email, password: password)
+            
+            await MainActor.run {
+                if isBiometric {
+                    self.isAuthenticatingBiometric = false
+                    self.biometricAuthResult = "Login successful!"
+                } else {
+                    self.isLoading = false
+                }
+                
+                self.currentUser = result.user
+                self.isLoggedIn = true
+            }
+            
+            print("✅ Login successful for: \(result.user.email ?? "No email") - User: gamikapunsisi at 2025-08-21 16:55:48")
+            
+            // Store credentials for biometric authentication if requested
+            if storeBiometric && !isBiometric {
+                await enableBiometricAuthForUser(email: email, password: password)
+            }
+            
+        } catch {
+            await MainActor.run {
+                if isBiometric {
+                    self.isAuthenticatingBiometric = false
+                    self.biometricAuthResult = "Login failed: \(self.friendlyErrorMessage(error))"
+                } else {
+                    self.isLoading = false
+                    self.errorMessage = self.friendlyErrorMessage(error)
+                }
+            }
+            
+            print("❌ Firebase Login Error: \(error.localizedDescription) - User: gamikapunsisi at 2025-08-21 16:55:48")
+        }
+    }
+    
+    // MARK: - ✅ Biometric Setup for User
+    
+    func enableBiometricAuthForUser(email: String, password: String) async {
+        print("🔐 Setting up biometric authentication for user - User: gamikapunsisi at 2025-08-21 16:55:48")
+        
+        let success = await biometricManager.enableBiometricAuth()
+        
+        if success {
+            // Store credentials securely
+            storeCredentials(email: email, password: password)
+            
+            await MainActor.run {
+                self.shouldShowBiometricPrompt = true
+            }
+            
+            print("✅ Biometric authentication enabled and credentials stored")
+        } else {
+            print("❌ Failed to enable biometric authentication")
+        }
+    }
+    
+    func disableBiometricAuth() {
+        print("🔐 Disabling biometric authentication - User: gamikapunsisi at 2025-08-21 16:55:48")
+        
+        biometricManager.disableBiometricAuth()
+        removeStoredCredentials()
+        
+        shouldShowBiometricPrompt = false
+        
+        print("✅ Biometric authentication disabled and credentials removed")
+    }
+    
+    // MARK: - ✅ Keychain Management
+    
+    private func storeCredentials(email: String, password: String) {
+        storeCredential(email, for: emailKey)
+        storeCredential(password, for: passwordKey)
+        print("🔑 Credentials stored securely in Keychain")
+    }
+    
+    private func storeCredential(_ value: String, for key: String) {
+        let data = value.data(using: .utf8) ?? Data()
+        
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: key,
+            kSecValueData as String: data
+        ]
+        
+        // Delete existing item first
+        SecItemDelete(query as CFDictionary)
+        
+        // Add new item
+        let status = SecItemAdd(query as CFDictionary, nil)
+        if status != errSecSuccess {
+            print("⚠️ Failed to store credential for key: \(key)")
+        }
+    }
+    
+    private func getStoredCredential(for key: String) -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: key,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        
+        guard status == errSecSuccess,
+              let data = result as? Data,
+              let credential = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        
+        return credential
+    }
+    
+    private func removeStoredCredentials() {
+        removeStoredCredential(for: emailKey)
+        removeStoredCredential(for: passwordKey)
+        print("🗑️ Stored credentials removed from Keychain")
+    }
+    
+    private func removeStoredCredential(for key: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: key
+        ]
+        
+        SecItemDelete(query as CFDictionary)
+    }
+    
+    private func hasStoredCredentials() -> Bool {
+        return getStoredCredential(for: emailKey) != nil && getStoredCredential(for: passwordKey) != nil
     }
     
     // MARK: - Configuration
     private func configureAuthentication() {
         if isUITestingMode {
-            print("🧪 AuthViewModel: UI Testing Mode Detected - User: gamikapunsisi at 2025-08-20 06:16:17")
+            print("🧪 AuthViewModel: UI Testing Mode Detected - User: gamikapunsisi at 2025-08-21 16:55:48")
             setupMockAuthenticationForTesting()
         } else {
-            print("✅ AuthViewModel: Production Mode - User: gamikapunsisi at 2025-08-20 06:16:17")
+            print("✅ AuthViewModel: Production Mode - User: gamikapunsisi at 2025-08-21 16:55:48")
             configureFirebaseAuth()
         }
     }
@@ -86,12 +355,12 @@ class AuthViewModel: ObservableObject {
         
         if FirebaseApp.app() == nil {
             FirebaseApp.configure()
-            print("✅ Firebase configured in AuthViewModel - User: gamikapunsisi at 2025-08-20 06:16:17")
+            print("✅ Firebase configured in AuthViewModel - User: gamikapunsisi at 2025-08-21 16:55:48")
         }
         
         // Check if user is already authenticated
         if let currentUser = Auth.auth().currentUser {
-            print("✅ User already authenticated: \(currentUser.email ?? "No email") - User: gamikapunsisi at 2025-08-20 06:16:17")
+            print("✅ User already authenticated: \(currentUser.email ?? "No email") - User: gamikapunsisi at 2025-08-21 16:55:48")
             DispatchQueue.main.async {
                 self.isLoggedIn = true
                 self.currentUser = currentUser
@@ -101,7 +370,7 @@ class AuthViewModel: ObservableObject {
     }
     
     private func setupMockAuthenticationForTesting() {
-        print("🧪 Setting up mock authentication for UI testing - User: gamikapunsisi at 2025-08-20 06:16:17")
+        print("🧪 Setting up mock authentication for UI testing - User: gamikapunsisi at 2025-08-21 16:55:48")
         
         // Check if we should start authenticated
         let shouldMockAuth = UserDefaults.standard.bool(forKey: "MOCK_AUTHENTICATED") ||
@@ -129,10 +398,10 @@ class AuthViewModel: ObservableObject {
                     isVerified: true
                 )
                 
-                print("🧪 Mock authentication complete - Role: \(mockRoleString) - User: gamikapunsisi at 2025-08-20 06:16:17")
+                print("🧪 Mock authentication complete - Role: \(mockRoleString) - User: gamikapunsisi at 2025-08-21 16:55:48")
             }
         } else {
-            print("🧪 Mock authentication disabled - showing login screen - User: gamikapunsisi at 2025-08-20 06:16:17")
+            print("🧪 Mock authentication disabled - showing login screen - User: gamikapunsisi at 2025-08-21 16:55:48")
         }
     }
     
@@ -140,7 +409,7 @@ class AuthViewModel: ObservableObject {
     private func setupAuthStateListener() {
         // Skip Firebase listener in UI testing mode
         guard !isUITestingMode else {
-            print("🧪 Skipping Firebase auth listener in UI testing mode - User: gamikapunsisi at 2025-08-20 06:16:17")
+            print("🧪 Skipping Firebase auth listener in UI testing mode - User: gamikapunsisi at 2025-08-21 16:55:48")
             return
         }
         
@@ -150,11 +419,11 @@ class AuthViewModel: ObservableObject {
                 self?.isLoggedIn = user != nil
                 
                 if let user = user {
-                    print("✅ Auth state changed: User logged in - \(user.email ?? "No email") - User: gamikapunsisi at 2025-08-20 06:16:17")
+                    print("✅ Auth state changed: User logged in - \(user.email ?? "No email") - User: gamikapunsisi at 2025-08-21 16:55:48")
                     self?.fetchUserRole()
                     self?.fetchUserProfile()
                 } else {
-                    print("❌ Auth state changed: User logged out - User: gamikapunsisi at 2025-08-20 06:16:17")
+                    print("❌ Auth state changed: User logged out - User: gamikapunsisi at 2025-08-21 16:55:48")
                     self?.role = nil
                     self?.userProfile = nil
                 }
@@ -164,7 +433,7 @@ class AuthViewModel: ObservableObject {
     
     // MARK: - Sign Up with Role
     func signUp(email: String, password: String, fullName: String = "", role: UserRole) {
-        print("🔄 Starting sign up process for: \(email) with role: \(role.rawValue) - User: gamikapunsisi at 2025-08-20 06:16:17")
+        print("🔄 Starting sign up process for: \(email) with role: \(role.rawValue) - User: gamikapunsisi at 2025-08-21 16:55:48")
         
         // Handle UI testing mode
         if isUITestingMode {
@@ -180,7 +449,7 @@ class AuthViewModel: ObservableObject {
         
         Auth.auth().createUser(withEmail: email, password: password) { [weak self] result, error in
             if let error = error {
-                print("❌ Firebase SignUp Error: \(error.localizedDescription) - User: gamikapunsisi at 2025-08-20 06:16:17")
+                print("❌ Firebase SignUp Error: \(error.localizedDescription) - User: gamikapunsisi at 2025-08-21 16:55:48")
                 DispatchQueue.main.async {
                     self?.isLoading = false
                     self?.errorMessage = self?.friendlyErrorMessage(error)
@@ -189,7 +458,7 @@ class AuthViewModel: ObservableObject {
             }
             
             guard let uid = result?.user.uid else {
-                print("❌ Firebase SignUp Error: User ID not found - User: gamikapunsisi at 2025-08-20 06:16:17")
+                print("❌ Firebase SignUp Error: User ID not found - User: gamikapunsisi at 2025-08-21 16:55:48")
                 DispatchQueue.main.async {
                     self?.isLoading = false
                     self?.errorMessage = "Failed to create user account"
@@ -203,7 +472,7 @@ class AuthViewModel: ObservableObject {
                 changeRequest?.displayName = fullName
                 changeRequest?.commitChanges { error in
                     if let error = error {
-                        print("⚠️ Failed to update display name: \(error.localizedDescription) - User: gamikapunsisi at 2025-08-20 06:16:17")
+                        print("⚠️ Failed to update display name: \(error.localizedDescription) - User: gamikapunsisi at 2025-08-21 16:55:48")
                     }
                 }
             }
@@ -214,7 +483,7 @@ class AuthViewModel: ObservableObject {
     }
     
     private func mockSignUp(email: String, role: UserRole, fullName: String) {
-        print("🧪 Mock sign up for: \(email) with role: \(role.rawValue) - User: gamikapunsisi at 2025-08-20 06:16:17")
+        print("🧪 Mock sign up for: \(email) with role: \(role.rawValue) - User: gamikapunsisi at 2025-08-21 16:55:48")
         
         isLoading = true
         
@@ -236,7 +505,7 @@ class AuthViewModel: ObservableObject {
                 isVerified: true
             )
             
-            print("🧪 Mock sign up successful - User: gamikapunsisi at 2025-08-20 06:16:17")
+            print("🧪 Mock sign up successful - User: gamikapunsisi at 2025-08-21 16:55:48")
         }
     }
     
@@ -254,7 +523,7 @@ class AuthViewModel: ObservableObject {
             "createdAt": FieldValue.serverTimestamp(),
             "updatedAt": FieldValue.serverTimestamp(),
             "createdBy": "gamikapunsisi",
-            "lastUpdated": "2025-08-20 06:16:17 UTC"
+            "lastUpdated": "2025-08-21 16:55:48 UTC"
         ]
         
         db.collection("users").document(uid).setData(userData) { [weak self] error in
@@ -262,12 +531,12 @@ class AuthViewModel: ObservableObject {
                 self?.isLoading = false
                 
                 if let error = error {
-                    print("❌ Firestore Error: \(error.localizedDescription) - User: gamikapunsisi at 2025-08-20 06:16:17")
+                    print("❌ Firestore Error: \(error.localizedDescription) - User: gamikapunsisi at 2025-08-21 16:55:48")
                     self?.errorMessage = "Failed to save user data"
                     return
                 }
                 
-                print("✅ SignUp successful with role: \(role.rawValue) - User: gamikapunsisi at 2025-08-20 06:16:17")
+                print("✅ SignUp successful with role: \(role.rawValue) - User: gamikapunsisi at 2025-08-21 16:55:48")
                 print("📝 User data saved for: \(email)")
                 
                 self?.role = role
@@ -277,48 +546,8 @@ class AuthViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Login
-    func login(email: String, password: String) {
-        print("🔄 Starting login process for: \(email) - User: gamikapunsisi at 2025-08-20 06:16:17")
-        
-        // Handle UI testing mode
-        if isUITestingMode {
-            mockLogin(email: email)
-            return
-        }
-        
-        // Validation
-        guard validateLoginInput(email: email, password: password) else { return }
-        
-        isLoading = true
-        errorMessage = nil
-        
-        Auth.auth().signIn(withEmail: email, password: password) { [weak self] result, error in
-            DispatchQueue.main.async {
-                self?.isLoading = false
-                
-                if let error = error {
-                    print("❌ Firebase Login Error: \(error.localizedDescription) - User: gamikapunsisi at 2025-08-20 06:16:17")
-                    self?.errorMessage = self?.friendlyErrorMessage(error)
-                    return
-                }
-                
-                guard let user = result?.user else {
-                    print("❌ Login failed: No user returned - User: gamikapunsisi at 2025-08-20 06:16:17")
-                    self?.errorMessage = "Login failed"
-                    return
-                }
-                
-                print("✅ Login successful for: \(user.email ?? "No email") - User: gamikapunsisi at 2025-08-20 06:16:17")
-                self?.currentUser = user
-                self?.isLoggedIn = true
-                // Role and profile will be fetched by auth state listener
-            }
-        }
-    }
-    
     private func mockLogin(email: String) {
-        print("🧪 Mock login for: \(email) - User: gamikapunsisi at 2025-08-20 06:16:17")
+        print("🧪 Mock login for: \(email) - User: gamikapunsisi at 2025-08-21 16:55:48")
         
         isLoading = true
         
@@ -345,7 +574,7 @@ class AuthViewModel: ObservableObject {
                 isVerified: true
             )
             
-            print("🧪 Mock login successful - Role: \(mockRoleString) - User: gamikapunsisi at 2025-08-20 06:16:17")
+            print("🧪 Mock login successful - Role: \(mockRoleString) - User: gamikapunsisi at 2025-08-21 16:55:48")
         }
     }
     
@@ -353,20 +582,20 @@ class AuthViewModel: ObservableObject {
     func fetchUserRole() {
         // Skip Firebase calls in UI testing mode
         guard !isUITestingMode else {
-            print("🧪 Skipping Firebase role fetch in UI testing mode - User: gamikapunsisi at 2025-08-20 06:16:17")
+            print("🧪 Skipping Firebase role fetch in UI testing mode - User: gamikapunsisi at 2025-08-21 16:55:48")
             return
         }
         
         guard let uid = Auth.auth().currentUser?.uid else {
-            print("❌ Fetch role failed: No current user - User: gamikapunsisi at 2025-08-20 06:16:17")
+            print("❌ Fetch role failed: No current user - User: gamikapunsisi at 2025-08-21 16:55:48")
             return
         }
         
-        print("🔄 Fetching user role for UID: \(uid) - User: gamikapunsisi at 2025-08-20 06:16:17")
+        print("🔄 Fetching user role for UID: \(uid) - User: gamikapunsisi at 2025-08-21 16:55:48")
         
         db.collection("users").document(uid).getDocument { [weak self] snapshot, error in
             if let error = error {
-                print("❌ Firestore fetch role error: \(error.localizedDescription) - User: gamikapunsisi at 2025-08-20 06:16:17")
+                print("❌ Firestore fetch role error: \(error.localizedDescription) - User: gamikapunsisi at 2025-08-21 16:55:48")
                 DispatchQueue.main.async {
                     self?.errorMessage = "Failed to fetch user data"
                 }
@@ -374,7 +603,7 @@ class AuthViewModel: ObservableObject {
             }
             
             guard let data = snapshot?.data() else {
-                print("❌ No user data found in Firestore - User: gamikapunsisi at 2025-08-20 06:16:17")
+                print("❌ No user data found in Firestore - User: gamikapunsisi at 2025-08-21 16:55:48")
                 return
             }
             
@@ -382,14 +611,14 @@ class AuthViewModel: ObservableObject {
                let userRole = UserRole(rawValue: roleString) {
                 DispatchQueue.main.async {
                     self?.role = userRole
-                    print("✅ Fetched role: \(userRole.rawValue) - User: gamikapunsisi at 2025-08-20 06:16:17")
+                    print("✅ Fetched role: \(userRole.rawValue) - User: gamikapunsisi at 2025-08-21 16:55:48")
                 }
             } else {
-                print("❌ Invalid role data in Firestore - User: gamikapunsisi at 2025-08-20 06:16:17")
+                print("❌ Invalid role data in Firestore - User: gamikapunsisi at 2025-08-21 16:55:48")
                 // Default to client if no role found (changed from tasker to client)
                 DispatchQueue.main.async {
                     self?.role = .client
-                    print("⚠️ Defaulting to client role - User: gamikapunsisi at 2025-08-20 06:16:17")
+                    print("⚠️ Defaulting to client role - User: gamikapunsisi at 2025-08-21 16:55:48")
                 }
             }
         }
@@ -399,25 +628,25 @@ class AuthViewModel: ObservableObject {
     func fetchUserProfile() {
         // Skip Firebase calls in UI testing mode
         guard !isUITestingMode else {
-            print("🧪 Skipping Firebase profile fetch in UI testing mode - User: gamikapunsisi at 2025-08-20 06:16:17")
+            print("🧪 Skipping Firebase profile fetch in UI testing mode - User: gamikapunsisi at 2025-08-21 16:55:48")
             return
         }
         
         guard let uid = Auth.auth().currentUser?.uid else {
-            print("❌ Fetch profile failed: No current user - User: gamikapunsisi at 2025-08-20 06:16:17")
+            print("❌ Fetch profile failed: No current user - User: gamikapunsisi at 2025-08-21 16:55:48")
             return
         }
         
-        print("🔄 Fetching user profile for UID: \(uid) - User: gamikapunsisi at 2025-08-20 06:16:17")
+        print("🔄 Fetching user profile for UID: \(uid) - User: gamikapunsisi at 2025-08-21 16:55:48")
         
         db.collection("users").document(uid).getDocument { [weak self] snapshot, error in
             if let error = error {
-                print("❌ Firestore fetch profile error: \(error.localizedDescription) - User: gamikapunsisi at 2025-08-20 06:16:17")
+                print("❌ Firestore fetch profile error: \(error.localizedDescription) - User: gamikapunsisi at 2025-08-21 16:55:48")
                 return
             }
             
             guard let data = snapshot?.data() else {
-                print("❌ No profile data found - User: gamikapunsisi at 2025-08-20 06:16:17")
+                print("❌ No profile data found - User: gamikapunsisi at 2025-08-21 16:55:48")
                 return
             }
             
@@ -435,14 +664,14 @@ class AuthViewModel: ObservableObject {
             
             DispatchQueue.main.async {
                 self?.userProfile = profile
-                print("✅ User profile loaded successfully - User: gamikapunsisi at 2025-08-20 06:16:17")
+                print("✅ User profile loaded successfully - User: gamikapunsisi at 2025-08-21 16:55:48")
             }
         }
     }
     
-    // MARK: - Sign Out
+    // MARK: - ✅ Enhanced Sign Out with Biometric Cleanup
     func signOut() {
-        print("🔄 Starting sign out process - User: gamikapunsisi at 2025-08-20 06:16:17")
+        print("🔄 Starting sign out process - User: gamikapunsisi at 2025-08-21 16:55:48")
         
         // Handle UI testing mode
         if isUITestingMode {
@@ -459,26 +688,36 @@ class AuthViewModel: ObservableObject {
                 self.currentUser = nil
                 self.userProfile = nil
                 self.errorMessage = nil
+                
+                // ✅ Clear biometric state
+                self.shouldShowBiometricPrompt = false
+                self.biometricAuthResult = nil
+                self.isAuthenticatingBiometric = false
             }
             
-            print("✅ User signed out successfully - User: gamikapunsisi at 2025-08-20 06:16:17")
+            print("✅ User signed out successfully - User: gamikapunsisi at 2025-08-21 16:55:48")
         } catch {
             let errorMsg = error.localizedDescription
             DispatchQueue.main.async {
                 self.errorMessage = errorMsg
             }
-            print("❌ SignOut Error: \(errorMsg) - User: gamikapunsisi at 2025-08-20 06:16:17")
+            print("❌ SignOut Error: \(errorMsg) - User: gamikapunsisi at 2025-08-21 16:55:48")
         }
     }
     
     private func mockSignOut() {
-        print("🧪 Mock sign out - User: gamikapunsisi at 2025-08-20 06:16:17")
+        print("🧪 Mock sign out - User: gamikapunsisi at 2025-08-21 16:55:48")
         
         DispatchQueue.main.async {
             self.isLoggedIn = false
             self.role = nil
             self.userProfile = nil
             self.errorMessage = nil
+            
+            // ✅ Clear biometric state
+            self.shouldShowBiometricPrompt = false
+            self.biometricAuthResult = nil
+            self.isAuthenticatingBiometric = false
             
             // Clear mock data
             UserDefaults.standard.set(false, forKey: "MOCK_AUTHENTICATED")
@@ -487,7 +726,7 @@ class AuthViewModel: ObservableObject {
             UserDefaults.standard.removeObject(forKey: "MOCK_USER_EMAIL")
         }
         
-        print("🧪 Mock sign out complete - User: gamikapunsisi at 2025-08-20 06:16:17")
+        print("🧪 Mock sign out complete - User: gamikapunsisi at 2025-08-21 16:55:48")
     }
     
     // MARK: - Input Validation
@@ -496,19 +735,19 @@ class AuthViewModel: ObservableObject {
         
         guard !cleanEmail.isEmpty else {
             errorMessage = "Email cannot be empty"
-            print("❌ Validation failed: Empty email - User: gamikapunsisi at 2025-08-20 06:16:17")
+            print("❌ Validation failed: Empty email - User: gamikapunsisi at 2025-08-21 16:55:48")
             return false
         }
         
         guard isValidEmail(cleanEmail) else {
             errorMessage = "Please enter a valid email address"
-            print("❌ Validation failed: Invalid email format - User: gamikapunsisi at 2025-08-20 06:16:17")
+            print("❌ Validation failed: Invalid email format - User: gamikapunsisi at 2025-08-21 16:55:48")
             return false
         }
         
         guard password.count >= 6 else {
             errorMessage = "Password must be at least 6 characters long"
-            print("❌ Validation failed: Password too short - User: gamikapunsisi at 2025-08-20 06:16:17")
+            print("❌ Validation failed: Password too short - User: gamikapunsisi at 2025-08-21 16:55:48")
             return false
         }
         
@@ -520,13 +759,13 @@ class AuthViewModel: ObservableObject {
         
         guard !cleanEmail.isEmpty, !password.isEmpty else {
             errorMessage = "Email and password are required"
-            print("❌ Validation failed: Empty fields - User: gamikapunsisi at 2025-08-20 06:16:17")
+            print("❌ Validation failed: Empty fields - User: gamikapunsisi at 2025-08-21 16:55:48")
             return false
         }
         
         guard isValidEmail(cleanEmail) else {
             errorMessage = "Please enter a valid email address"
-            print("❌ Validation failed: Invalid email format - User: gamikapunsisi at 2025-08-20 06:16:17")
+            print("❌ Validation failed: Invalid email format - User: gamikapunsisi at 2025-08-21 16:55:48")
             return false
         }
         
@@ -568,16 +807,17 @@ class AuthViewModel: ObservableObject {
     // MARK: - Utility Methods
     func clearError() {
         errorMessage = nil
-        print("🧹 Error message cleared - User: gamikapunsisi at 2025-08-20 06:16:17")
+        biometricAuthResult = nil
+        print("🧹 Error messages cleared - User: gamikapunsisi at 2025-08-21 16:55:48")
     }
     
     func refreshUserData() {
         guard isLoggedIn else {
-            print("⚠️ Cannot refresh user data: User not logged in - User: gamikapunsisi at 2025-08-20 06:16:17")
+            print("⚠️ Cannot refresh user data: User not logged in - User: gamikapunsisi at 2025-08-21 16:55:48")
             return
         }
         
-        print("🔄 Refreshing user data - User: gamikapunsisi at 2025-08-20 06:16:17")
+        print("🔄 Refreshing user data - User: gamikapunsisi at 2025-08-21 16:55:48")
         fetchUserRole()
         fetchUserProfile()
     }
@@ -590,14 +830,31 @@ class AuthViewModel: ObservableObject {
         role == .client
     }
     
+    // MARK: - ✅ Biometric Properties
+    
+    var biometricType: BiometricType {
+        biometricManager.biometricType
+    }
+    
+    var isBiometricAvailable: Bool {
+        biometricManager.isBiometricAvailable
+    }
+    
+    var isBiometricEnabled: Bool {
+        biometricManager.isBiometricEnabled
+    }
+    
     // MARK: - Development & Testing Helpers
     func getCurrentUserInfo() -> String {
-        var info = "👤 Current User Info - User: gamikapunsisi at 2025-08-20 06:16:17\n"
+        var info = "👤 Current User Info - User: gamikapunsisi at 2025-08-21 16:55:48\n"
         info += "📧 Email: \(currentUser?.email ?? userProfile?.email ?? "Not available")\n"
         info += "👥 Role: \(role?.rawValue ?? "Not set")\n"
         info += "🏠 Name: \(userProfile?.fullName ?? "Not available")\n"
         info += "🔐 Logged In: \(isLoggedIn)\n"
         info += "🧪 UI Testing: \(isUITestingMode)\n"
+        info += "👆 Biometric Type: \(biometricType.displayName)\n"
+        info += "✅ Biometric Available: \(isBiometricAvailable)\n"
+        info += "🔛 Biometric Enabled: \(isBiometricEnabled)\n"
         
         return info
     }
@@ -607,14 +864,14 @@ class AuthViewModel: ObservableObject {
         UserDefaults.standard.set(true, forKey: "UI_TESTING_MODE")
         UserDefaults.standard.set(true, forKey: "MOCK_AUTHENTICATED")
         UserDefaults.standard.set("client", forKey: "MOCK_USER_ROLE")
-        print("🧪 Testing mode enabled - User: gamikapunsisi at 2025-08-20 06:16:17")
+        print("🧪 Testing mode enabled - User: gamikapunsisi at 2025-08-21 16:55:48")
     }
     
     func disableTestingMode() {
         UserDefaults.standard.set(false, forKey: "UI_TESTING_MODE")
         UserDefaults.standard.set(false, forKey: "MOCK_AUTHENTICATED")
         UserDefaults.standard.removeObject(forKey: "MOCK_USER_ROLE")
-        print("🧪 Testing mode disabled - User: gamikapunsisi at 2025-08-20 06:16:17")
+        print("🧪 Testing mode disabled - User: gamikapunsisi at 2025-08-21 16:55:48")
     }
     #endif
 }
